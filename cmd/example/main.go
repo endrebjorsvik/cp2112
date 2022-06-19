@@ -48,6 +48,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error opening CP2112: %s", err)
 	}
+	defer dev.Close()
+
 	version, err := dev.GetVersionInformation()
 	if err != nil {
 		log.Fatalf("Could not get version: %s.", err)
@@ -90,5 +92,24 @@ func main() {
 		dev.SetGpioValue(off, cp2112.GpioHigh)
 		dev.SetGpioValue(uint(i), cp2112.GpioLow)
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	smbus, err := dev.GetSmbusConfiguration()
+	if err != nil {
+		log.Fatalf("Could not get SMBus config: %s.", err)
+	}
+	fmt.Println("SMBus Config:", smbus)
+	if smbus.ClockSpeedHz == 100_000 {
+		smbus.ClockSpeedHz = 400_000
+	} else {
+		smbus.ClockSpeedHz = 100_000
+	}
+	err = dev.SetSmbusConfiguration(smbus)
+	if err != nil {
+		log.Fatalf("Could not set SMBus config: %s.", err)
+	}
+	smbus, err = dev.GetSmbusConfiguration()
+	if err != nil {
+		log.Fatalf("Could not get SMBus config: %s.", err)
 	}
 }

@@ -1,7 +1,9 @@
 package cp2112
 
 import (
+	"encoding/binary"
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/sstallion/go-hid"
@@ -42,7 +44,17 @@ func NewCP2112(vid, pid uint16, serial string) (*CP2112, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not open HID device %d:%d (SN: %s): %w", pid, vid, serial, err)
 	}
+	log.WithFields(log.Fields{
+		"vid":    vid,
+		"pid":    pid,
+		"serial": serial,
+	}).Debugf("Opened CP2112 device.")
 	return &CP2112{dev: dev}, nil
+}
+
+func (c *CP2112) Close() error {
+	log.Debugf("Closing CP2112 device.")
+	return c.dev.Close()
 }
 
 const (
@@ -356,7 +368,7 @@ func (c *GpioConfiguration) toReport() []byte {
 	return []byte{reportIdGpioConfiguration, direction, drive, special, c.ClockDivider}
 }
 
-func configurationFromReport(buf []byte) (GpioConfiguration, error) {
+func gpioConfigurationFromReport(buf []byte) (GpioConfiguration, error) {
 	if len(buf) != 5 {
 		return GpioConfiguration{}, fmt.Errorf("unexpected GPIO configuration report length: %d", len(buf))
 	}
@@ -390,7 +402,7 @@ func (d *CP2112) GetGpioConfiguration() (GpioConfiguration, error) {
 	if n_bytes != 5 {
 		return GpioConfiguration{}, fmt.Errorf("GetGpioConfiguration received unexpected number of bytes: %d", n_bytes)
 	}
-	conf, err := configurationFromReport(buf)
+	conf, err := gpioConfigurationFromReport(buf)
 	if err != nil {
 		return GpioConfiguration{}, err
 	}
@@ -448,4 +460,81 @@ func (d *CP2112) SetGpioDirection(idx uint, dir GpioDirection) error {
 	}
 	c.Direction[idx] = dir
 	return d.SetGpioConfiguration(c)
+}
+
+// SmbusConfiguration contains configuration for the SMBus/I2C interface.
+type SmbusConfiguration struct {
+	ClockSpeedHz  uint32
+	DeviceAddress byte
+	AutoSendRead  bool
+	WriteTimeout  time.Duration
+	ReadTimeout   time.Duration
+	SclLowTimeout bool
+	RetryTimes    uint16
+}
+
+func (c SmbusConfiguration) toReport() []byte {
+	buf := make([]byte, 14)
+	buf[0] = reportIdSmbusConfiguration
+	binary.BigEndian.PutUint32(buf[1:5], c.ClockSpeedHz)
+	buf[5] = c.DeviceAddress
+	if c.AutoSendRead {
+		buf[6] = 1
+	} else {
+		buf[6] = 0
+	}
+	binary.BigEndian.PutUint16(buf[7:9], uint16(c.WriteTimeout.Milliseconds()))
+	binary.BigEndian.PutUint16(buf[9:11], uint16(c.ReadTimeout.Milliseconds()))
+	if c.SclLowTimeout {
+		buf[11] = 1
+	} else {
+		buf[11] = 0
+	}
+	binary.BigEndian.PutUint16(buf[12:14], c.RetryTimes)
+	return buf
+}
+
+func smbusConfigurationFromReport(buf []byte) (SmbusConfiguration, error) {
+	if len(buf) != 14 {
+		return SmbusConfiguration{}, fmt.Errorf("unexpected SMBus configuration report length: %d", len(buf))
+	}
+	if buf[0] != reportIdSmbusConfiguration {
+		return SmbusConfiguration{}, fmt.Errorf("unexpected SMBus configuration report ID: %d", buf[0])
+	}
+	return SmbusConfiguration{
+		ClockSpeedHz:  binary.BigEndian.Uint32(buf[1:5]),
+		DeviceAddress: buf[5],
+		AutoSendRead:  buf[6] == 1,
+		WriteTimeout:  time.Duration(binary.BigEndian.Uint16(buf[7:9])) * time.Millisecond,
+		ReadTimeout:   time.Duration(binary.BigEndian.Uint16(buf[9:11])) * time.Millisecond,
+		SclLowTimeout: buf[11] == 1,
+		RetryTimes:    binary.BigEndian.Uint16(buf[12:14]),
+	}, nil
+}
+
+// GetSmbusConfiguration reads the SMBus/I2C configuration from CP2112.
+func (d *CP2112) GetSmbusConfiguration() (SmbusConfiguration, error) {
+	buf := make([]byte, 14)
+	buf[0] = reportIdSmbusConfiguration
+	n_bytes, err := d.dev.GetFeatureReport(buf)
+	if err != nil {
+		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration: %w", err)
+	}
+	if n_bytes != 14 {
+		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration received unexpected number of bytes: %d", n_bytes)
+	}
+	return smbusConfigurationFromReport(buf)
+}
+
+// SetSmbusConfiguration writes the given SMBus/I2C configuration to CP2112.
+func (d *CP2112) SetSmbusConfiguration(c SmbusConfiguration) error {
+	buf := c.toReport()
+	n_bytes, err := d.dev.SendFeatureReport(buf)
+	if err != nil {
+		return fmt.Errorf("SetSmbusConfiguration: %w", err)
+	}
+	if n_bytes != 14 {
+		return fmt.Errorf("SetSmbusConfiguration sent unexpected number of bytes: %d", n_bytes)
+	}
+	return nil
 }
