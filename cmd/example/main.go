@@ -112,4 +112,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not get SMBus config: %s.", err)
 	}
+	fmt.Println("SMBus Config:", smbus)
+	err = dev.SetSmbusClockSpeedHz(400_000)
+	if err != nil {
+		log.Fatalf("Could not set SMBus clock speed: %s.", err)
+	}
 }

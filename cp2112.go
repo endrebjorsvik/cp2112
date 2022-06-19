@@ -77,6 +77,9 @@ const (
 	reportIdManufacturingString    byte = 0x22
 	reportIdProductString          byte = 0x23
 	reportIdSerialString           byte = 0x24
+
+	smbusClockSpeedHzMin uint32 = 10_000
+	smbusClockSpeedHzMax uint32 = 400_000
 )
 
 // Version holds the device version information. PartNumber indicates the
@@ -464,16 +467,19 @@ func (d *CP2112) SetGpioDirection(idx uint, dir GpioDirection) error {
 
 // SmbusConfiguration contains configuration for the SMBus/I2C interface.
 type SmbusConfiguration struct {
-	ClockSpeedHz  uint32        // Current SMBus/I2C clock speed given in hertz.
+	ClockSpeedHz  uint32        // SMBus/I2C clock speed given in hertz.
 	DeviceAddress byte          // 7-bit slave address of the CP2112. Master device address. Only ACKed, but can not communicate.
 	AutoSendRead  bool          // Automatically send read response interrupt reports to the host after a read transfer is initiated
 	WriteTimeout  time.Duration // Time limit before the CP2112 automatically cancels a transfer that has been initiated. Zero is infinite.
 	ReadTimeout   time.Duration // Time limit before the CP2112 automatically cancels a transfer that has been initiated. Zero is infinite.
 	SclLowTimeout bool          // Resets the SMBus if the SCL line is held low for more than 25 ms.
-	RetryTimes    uint16        // Number of attempts that the CP2112 attempts to complete a transfer before terminating the transfer.
+	RetryTimes    uint16        // Number of attempts that the CP2112 attempts to complete a transfer before terminating the transfer. Values larger than 1000 are ignored.
 }
 
-func (c SmbusConfiguration) toReport() []byte {
+func (c SmbusConfiguration) toReport() ([]byte, error) {
+	if (c.ClockSpeedHz < smbusClockSpeedHzMin) || (c.ClockSpeedHz > smbusClockSpeedHzMax) {
+		return nil, fmt.Errorf("invalid SMBus/I2C clock speed: %d Hz", c.ClockSpeedHz)
+	}
 	buf := make([]byte, 14)
 	buf[0] = reportIdSmbusConfiguration
 	binary.BigEndian.PutUint32(buf[1:5], c.ClockSpeedHz)
@@ -491,7 +497,7 @@ func (c SmbusConfiguration) toReport() []byte {
 		buf[11] = 0
 	}
 	binary.BigEndian.PutUint16(buf[12:14], c.RetryTimes)
-	return buf
+	return buf, nil
 }
 
 func smbusConfigurationFromReport(buf []byte) (SmbusConfiguration, error) {
@@ -528,7 +534,10 @@ func (d *CP2112) GetSmbusConfiguration() (SmbusConfiguration, error) {
 
 // SetSmbusConfiguration writes the given SMBus/I2C configuration to CP2112.
 func (d *CP2112) SetSmbusConfiguration(c SmbusConfiguration) error {
-	buf := c.toReport()
+	buf, err := c.toReport()
+	if err != nil {
+		return fmt.Errorf("SetSmbusConfiguration: %w", err)
+	}
 	n_bytes, err := d.dev.SendFeatureReport(buf)
 	if err != nil {
 		return fmt.Errorf("SetSmbusConfiguration: %w", err)
@@ -537,4 +546,23 @@ func (d *CP2112) SetSmbusConfiguration(c SmbusConfiguration) error {
 		return fmt.Errorf("SetSmbusConfiguration sent unexpected number of bytes: %d", n_bytes)
 	}
 	return nil
+}
+
+// GetSmbusClockSpeedHz gets the currently configured SMBus/I2C clock frequency in hertz.
+func (d *CP2112) GetSmbusClockSpeedHz() (uint32, error) {
+	c, err := d.GetSmbusConfiguration()
+	if err != nil {
+		return 0, err
+	}
+	return c.ClockSpeedHz, nil
+}
+
+// SetSmbusClockSpeedHz sets the currently configured SMBus/I2C clock frequency in hertz.
+func (d *CP2112) SetSmbusClockSpeedHz(clockSpeedHz uint32) error {
+	c, err := d.GetSmbusConfiguration()
+	if err != nil {
+		return err
+	}
+	c.ClockSpeedHz = clockSpeedHz
+	return d.SetSmbusConfiguration(c)
 }
