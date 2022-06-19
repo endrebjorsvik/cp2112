@@ -13,15 +13,15 @@ import (
 // USB-to-I2C/SMBus controller. The controller also contains a 8 GPIO
 // pins that can be controlled through the same interface.
 type CP2112 struct {
-	dev *hid.Device
+	dev *hid.Device // Open device handle
 }
 
 // DevID is USB HID identification that is used to connect to the correct
 // HID device.
 type DevID struct {
-	Vid    uint16
-	Pid    uint16
-	Serial string
+	Vid    uint16 // Device Vendor ID
+	Pid    uint16 // Device Product ID
+	Serial string // Device serial number
 }
 
 // FindCP2112 finds and returns all compatible CP2112 devices that are
@@ -83,8 +83,8 @@ const (
 // device part number. The CP2112 always returns 0x0C. DeviceVersion is the
 // version of the device. This value is not programmable over the HID interface.
 type Version struct {
-	PartNumber    byte
-	DeviceVersion byte
+	PartNumber    byte // Device part number. Always 0x0C.
+	DeviceVersion byte // Device version number.
 }
 
 func (v Version) String() string {
@@ -344,12 +344,12 @@ func (d *CP2112) GetGpioValue(idx uint) (GpioValue, error) {
 
 // GpioConfiguration describes the configuration of the GPIO pins.
 type GpioConfiguration struct {
-	Direction         [8]GpioDirection
-	Drive             [8]GpioDrive
-	Gpio0TxEnabled    bool
-	Gpio1RxEnabled    bool
-	Gpio7ClockEnabled bool
-	ClockDivider      byte
+	Direction         [8]GpioDirection // Pin direction for GPIO pins (in or out)
+	Drive             [8]GpioDrive     // Drive topology for GPIO pins (push-pull or open-drain)
+	Gpio0TxEnabled    bool             // Indicates if GPIO0 is configured as SMBus Tx indicator.
+	Gpio1RxEnabled    bool             // Indicates if GPIO1 is configured as SMBus Rx indicator.
+	Gpio7ClockEnabled bool             // Indicates if GPIO7 is configured as clock generator output.
+	ClockDivider      byte             // Clock divider setting for GPIO7 clock generator. f(0) = 48 MHz, else f(x) = 48 MHz / (2 * x).
 }
 
 func (c *GpioConfiguration) toReport() []byte {
@@ -464,13 +464,13 @@ func (d *CP2112) SetGpioDirection(idx uint, dir GpioDirection) error {
 
 // SmbusConfiguration contains configuration for the SMBus/I2C interface.
 type SmbusConfiguration struct {
-	ClockSpeedHz  uint32
-	DeviceAddress byte
-	AutoSendRead  bool
-	WriteTimeout  time.Duration
-	ReadTimeout   time.Duration
-	SclLowTimeout bool
-	RetryTimes    uint16
+	ClockSpeedHz  uint32        // Current SMBus/I2C clock speed given in hertz.
+	DeviceAddress byte          // 7-bit slave address of the CP2112. Master device address. Only ACKed, but can not communicate.
+	AutoSendRead  bool          // Automatically send read response interrupt reports to the host after a read transfer is initiated
+	WriteTimeout  time.Duration // Time limit before the CP2112 automatically cancels a transfer that has been initiated. Zero is infinite.
+	ReadTimeout   time.Duration // Time limit before the CP2112 automatically cancels a transfer that has been initiated. Zero is infinite.
+	SclLowTimeout bool          // Resets the SMBus if the SCL line is held low for more than 25 ms.
+	RetryTimes    uint16        // Number of attempts that the CP2112 attempts to complete a transfer before terminating the transfer.
 }
 
 func (c SmbusConfiguration) toReport() []byte {
