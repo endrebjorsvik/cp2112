@@ -751,7 +751,8 @@ type TransferStatus struct {
 	Status3 uint16
 }
 
-// TransferStatusResponse requests a transfer status.
+// TransferStatusResponse receives the status response from the previously
+// requested transfer status.
 func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 	buf := make([]byte, 7)
 	if n, err := d.dev.Read(buf); err != nil {
