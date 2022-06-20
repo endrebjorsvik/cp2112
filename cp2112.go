@@ -465,10 +465,33 @@ func (d *CP2112) SetGpioDirection(idx uint, dir GpioDirection) error {
 	return d.SetGpioConfiguration(c)
 }
 
+// EnableRxTxIndicator controls the Rx/Tx indicator function
+func (d *CP2112) EnableRxTxIndicator(enableTx, enableRx bool) error {
+	c, err := d.GetGpioConfiguration()
+	if err != nil {
+		return fmt.Errorf("EnableRxTxIndicator: %w", err)
+	}
+	c.Gpio0TxEnabled = enableTx
+	if enableTx {
+		c.Direction[0] = GpioOutput
+		c.Drive[0] = GpioOpenDrain
+	}
+	c.Gpio1RxEnabled = enableRx
+	if enableRx {
+		c.Direction[1] = GpioOutput
+		c.Drive[0] = GpioOpenDrain
+	}
+	err = d.SetGpioConfiguration(c)
+	if err != nil {
+		return fmt.Errorf("EnableRxTxIndicator: %w", err)
+	}
+	return nil
+}
+
 // SmbusConfiguration contains configuration for the SMBus/I2C interface.
 type SmbusConfiguration struct {
 	ClockSpeedHz  uint32        // SMBus/I2C clock speed given in hertz.
-	DeviceAddress byte          // 7-bit slave address of the CP2112. Master device address. Only ACKed, but can not communicate.
+	DeviceAddress byte          // 7-bit device address of the CP2112. Master device address. Only ACKed, but can not communicate.
 	AutoSendRead  bool          // Automatically send read response interrupt reports to the host after a read transfer is initiated
 	WriteTimeout  time.Duration // Time limit before the CP2112 automatically cancels a transfer that has been initiated. Zero is infinite.
 	ReadTimeout   time.Duration // Time limit before the CP2112 automatically cancels a transfer that has been initiated. Zero is infinite.
@@ -565,4 +588,74 @@ func (d *CP2112) SetSmbusClockSpeedHz(clockSpeedHz uint32) error {
 	}
 	c.ClockSpeedHz = clockSpeedHz
 	return d.SetSmbusConfiguration(c)
+}
+
+func checkDeviceAddress(addr byte) error {
+	if (addr & 1) == 1 {
+		return fmt.Errorf("invalid device address: 0x%02x. LSB must be zero", addr)
+	}
+	return nil
+}
+
+// TransferDataReadRequest initiates a read operation. deviceAddr is the 7-bit address of the
+// device from which data is being read. length is the number of bytes being requested from
+// the device.
+func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
+	if err := checkDeviceAddress(deviceAddr); err != nil {
+		return fmt.Errorf("TransferDataReadRequest: %w", err)
+	}
+	if length < 1 || length > 512 {
+		return fmt.Errorf("TransferDataReadRequest: invalid read length: %d. Must be between 1 and 512", length)
+	}
+	buf := make([]byte, 4)
+	buf[0] = reportIdDataReadRequest
+	buf[1] = deviceAddr
+	binary.BigEndian.PutUint16(buf[2:4], length)
+	n_bytes, err := d.dev.SendFeatureReport(buf)
+	if err != nil {
+		return fmt.Errorf("TransferDataReadRequest: %w", err)
+	}
+	if n_bytes != 4 {
+		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n_bytes)
+	}
+	return nil
+}
+
+func checkReadLength(length uint16) error {
+	if length < 1 || length > 512 {
+		return fmt.Errorf("invalid read length: %d. Must be between 1 and 512", length)
+	}
+	return nil
+}
+
+// TransferDataWriteReadRequest initiates a address write operation followed by a read operation.
+// deviceAddr is the 7-bit address of the device from which data is being read. length is the
+// number of bytes being requested from the device. targetAddr is the address of the memory
+// location being read on the device. The number of bytes in the targetAddr can be maximum
+// 16 bytes.
+func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, targetAddr []byte) error {
+	if err := checkDeviceAddress(deviceAddr); err != nil {
+		return fmt.Errorf("TransferDataWriteReadRequest: %w", err)
+	}
+	if err := checkReadLength(length); err != nil {
+		return fmt.Errorf("TransferDataWriteReadRequest: %w", err)
+	}
+	targetAddrLen := len(targetAddr)
+	if len(targetAddr) < 1 || len(targetAddr) > 16 {
+		return fmt.Errorf("TransferDataWriteReadRequest: invalid targetAddress length: %d", len(targetAddr))
+	}
+	buf := make([]byte, 5+targetAddrLen)
+	buf[0] = reportIdDataWriteReadRequest
+	buf[1] = deviceAddr
+	binary.BigEndian.PutUint16(buf[2:4], length)
+	buf[4] = byte(targetAddrLen)
+	copy(buf[5:], targetAddr)
+	n_bytes, err := d.dev.SendFeatureReport(buf)
+	if err != nil {
+		return fmt.Errorf("TransferDataWriteReadRequest: %w", err)
+	}
+	if n_bytes != len(buf) {
+		return fmt.Errorf("TransferDataWriteReadRequest: sent unexpected number of bytes: %d", n_bytes)
+	}
+	return nil
 }

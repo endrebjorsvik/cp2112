@@ -10,8 +10,89 @@ import (
 	"github.com/sstallion/go-hid"
 )
 
+func gpioDemo(dev *cp2112.CP2112) error {
+
+	values, err := dev.GetGpioValues()
+	if err != nil {
+		return fmt.Errorf("Could not get GPIO values: %s.", err)
+	}
+	fmt.Println("GPIOs:", values)
+	err = dev.SetGpioDirection(2, cp2112.GpioOutput)
+	if err != nil {
+		return fmt.Errorf("Could not set GPIO direction: %s.", err)
+	}
+	values, err = dev.GetGpioValues()
+	if err != nil {
+		return fmt.Errorf("Could not get GPIO values: %s.", err)
+	}
+	fmt.Println("GPIOs:", values)
+	config, err := dev.GetGpioConfiguration()
+	if err != nil {
+		return fmt.Errorf("Could not get GPIO config: %s.", err)
+	}
+	fmt.Println("Config:", config)
+
+	all_out := [8]cp2112.GpioDirection{
+		cp2112.GpioOutput,
+		cp2112.GpioOutput,
+		cp2112.GpioOutput,
+		cp2112.GpioOutput,
+		cp2112.GpioOutput,
+		cp2112.GpioOutput,
+		cp2112.GpioOutput,
+		cp2112.GpioOutput,
+	}
+	dev.SetGpioDirections(all_out)
+	for i := 0; i < 8; i++ {
+		off := uint((i - 1) % 8)
+		dev.SetGpioValue(off, cp2112.GpioHigh)
+		dev.SetGpioValue(uint(i), cp2112.GpioLow)
+		time.Sleep(100 * time.Millisecond)
+	}
+	return nil
+}
+
+func smbusDemo(dev *cp2112.CP2112) error {
+
+	if err := dev.EnableRxTxIndicator(true, true); err != nil {
+		return fmt.Errorf("could not enable Tx/Rx indicators: %w", err)
+	}
+
+	config, err := dev.GetSmbusConfiguration()
+	if err != nil {
+		return fmt.Errorf("Could not get SMBus config: %s.", err)
+	}
+	fmt.Println("SMBus Config:", config)
+	if config.ClockSpeedHz == 100_000 {
+		config.ClockSpeedHz = 400_000
+	} else {
+		config.ClockSpeedHz = 100_000
+	}
+	err = dev.SetSmbusConfiguration(config)
+	if err != nil {
+		return fmt.Errorf("Could not set SMBus config: %s.", err)
+	}
+	config, err = dev.GetSmbusConfiguration()
+	if err != nil {
+		return fmt.Errorf("Could not get SMBus config: %s.", err)
+	}
+	fmt.Println("SMBus Config:", config)
+	err = dev.SetSmbusClockSpeedHz(400_000)
+	if err != nil {
+		return fmt.Errorf("Could not set SMBus clock speed: %s.", err)
+	}
+
+	err = dev.TransferDataWriteReadRequest(12, 2, []byte{2})
+	if err != nil {
+		return fmt.Errorf("Could not send WriteRead request: %s.", err)
+	}
+	return nil
+}
+
 func main() {
 	verbose := flag.Bool("verbose", false, "Increase logging.")
+	runGpio := flag.Bool("gpio", false, "Run GPIO demo.")
+	runSmbus := flag.Bool("smbus", false, "Run SMBus demo.")
 	flag.Parse()
 
 	if *verbose {
@@ -21,7 +102,7 @@ func main() {
 	fmt.Println("Listing all connected USB HID devices.")
 	hid.Enumerate(hid.VendorIDAny, hid.ProductIDAny,
 		func(info *hid.DeviceInfo) error {
-			fmt.Printf("%s: ID %04x:%04x %s %s, SN: %s, Rel: %d, %d %d, if: %d.\n",
+			fmt.Printf(" - %s: ID %04x:%04x %s %s, SN: %s, Rel: %d, %d %d, if: %d.\n",
 				info.Path,
 				info.VendorID,
 				info.ProductID,
@@ -54,67 +135,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not get version: %s.", err)
 	}
-
 	fmt.Println("CP2112 version:", version)
-	gpio, err := dev.GetGpioValues()
-	if err != nil {
-		log.Fatalf("Could not get GPIO values: %s.", err)
-	}
-	fmt.Println("GPIOs:", gpio)
-	err = dev.SetGpioDirection(2, cp2112.GpioOutput)
-	if err != nil {
-		log.Fatalf("Could not set GPIO direction: %s.", err)
-	}
-	gpio, err = dev.GetGpioValues()
-	if err != nil {
-		log.Fatalf("Could not get GPIO values: %s.", err)
-	}
-	fmt.Println("GPIOs:", gpio)
-	config, err := dev.GetGpioConfiguration()
-	if err != nil {
-		log.Fatalf("Could not get GPIO config: %s.", err)
-	}
-	fmt.Println("Config:", config)
 
-	all_out := [8]cp2112.GpioDirection{
-		cp2112.GpioOutput,
-		cp2112.GpioOutput,
-		cp2112.GpioOutput,
-		cp2112.GpioOutput,
-		cp2112.GpioOutput,
-		cp2112.GpioOutput,
-		cp2112.GpioOutput,
-		cp2112.GpioOutput,
-	}
-	dev.SetGpioDirections(all_out)
-	for i := 0; i < 8; i++ {
-		off := uint((i - 1) % 8)
-		dev.SetGpioValue(off, cp2112.GpioHigh)
-		dev.SetGpioValue(uint(i), cp2112.GpioLow)
-		time.Sleep(100 * time.Millisecond)
+	if *runGpio {
+		if err := gpioDemo(dev); err != nil {
+			log.Fatalf("gpioDemo error: %w", err)
+		}
 	}
 
-	smbus, err := dev.GetSmbusConfiguration()
-	if err != nil {
-		log.Fatalf("Could not get SMBus config: %s.", err)
-	}
-	fmt.Println("SMBus Config:", smbus)
-	if smbus.ClockSpeedHz == 100_000 {
-		smbus.ClockSpeedHz = 400_000
-	} else {
-		smbus.ClockSpeedHz = 100_000
-	}
-	err = dev.SetSmbusConfiguration(smbus)
-	if err != nil {
-		log.Fatalf("Could not set SMBus config: %s.", err)
-	}
-	smbus, err = dev.GetSmbusConfiguration()
-	if err != nil {
-		log.Fatalf("Could not get SMBus config: %s.", err)
-	}
-	fmt.Println("SMBus Config:", smbus)
-	err = dev.SetSmbusClockSpeedHz(400_000)
-	if err != nil {
-		log.Fatalf("Could not set SMBus clock speed: %s.", err)
+	if *runSmbus {
+		if err := smbusDemo(dev); err != nil {
+			log.Fatalf("smbusDemo error: %w", err)
+		}
 	}
 }
