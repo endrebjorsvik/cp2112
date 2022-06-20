@@ -109,16 +109,19 @@ func main() {
 	verbose := flag.Bool("verbose", false, "Increase logging.")
 	runGpio := flag.Bool("gpio", false, "Run GPIO demo.")
 	runSmbus := flag.Bool("smbus", false, "Run SMBus demo.")
+	deviceIdx := flag.Int("dev", 0, "Device index of compatible CP2112.")
 	flag.Parse()
 
 	if *verbose {
 		log.SetLevel(log.DebugLevel)
 	}
 
+	idx := 0
 	fmt.Println("Listing all connected USB HID devices.")
 	hid.Enumerate(hid.VendorIDAny, hid.ProductIDAny,
 		func(info *hid.DeviceInfo) error {
-			fmt.Printf(" - %s: ID %04x:%04x %s %s, SN: %s, Rel: %d, %d %d, if: %d.\n",
+			fmt.Printf(" %d. %s: ID %04x:%04x %s %s, SN: %s, Rel: %d, %d %d, if: %d.\n",
+				idx,
 				info.Path,
 				info.VendorID,
 				info.ProductID,
@@ -129,6 +132,7 @@ func main() {
 				info.Usage,
 				info.UsagePage,
 				info.InterfaceNbr)
+			idx++
 			return nil
 		})
 
@@ -139,7 +143,10 @@ func main() {
 	if len(cpids) < 1 {
 		log.Fatalf("Could not find any CP2112.")
 	}
-	cpid := cpids[0]
+	if *deviceIdx >= len(cpids) {
+		log.Fatalf("Invalid device index: %d", *deviceIdx)
+	}
+	cpid := cpids[*deviceIdx]
 
 	dev, err := cp2112.NewCP2112(cpid.Vid, cpid.Pid, cpid.Serial)
 	if err != nil {
