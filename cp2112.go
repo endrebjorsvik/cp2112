@@ -806,3 +806,16 @@ func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 		Status3: binary.BigEndian.Uint16(buf[5:7]),
 	}, nil
 }
+
+// TransferCancel cancels the ongoing transfer
+func (d *CP2112) TransferCancel() error {
+	buf := []byte{reportIdCancelTransfer, 0x01}
+	n_bytes, err := d.dev.Write(buf)
+	if err != nil {
+		return fmt.Errorf("TransferCancel: %w", err)
+	}
+	if n_bytes != len(buf) {
+		return fmt.Errorf("TransferCancel: sent unexpected number of bytes: %d", n_bytes)
+	}
+	return nil
+}
