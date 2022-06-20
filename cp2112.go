@@ -659,3 +659,62 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	}
 	return nil
 }
+
+// TransferDataReadForceSend forces the device to send a Data Read Response report
+// when the next Interrupt IN token arrives. This is essentially polled mode reading.
+// The PC should poll using Transfer Status Request first to determine whether data is
+// ready. The number of bytes requested can be 1 to 512. If the number of bytes requested
+// is greater than the number of valid bytes in the CP2112’s received bytes buffer, only
+// the valid bytes will be returned.
+//
+// This command should only be used when Auto Send Read is set to false. This command
+// is ignored when Auto Send Read is set to true. If a transfer is not in progress or
+// if no data is in the buffer, this command performs no action. This command can be
+// used while a read is in progress to retrieve the data received so far.
+func (d *CP2112) TransferDataReadForceSend(length uint16) error {
+	if err := checkReadLength(length); err != nil {
+		return fmt.Errorf("TransferDataReadForceSend: %w", err)
+	}
+	buf := make([]byte, 2)
+	buf[0] = reportIdDataReadForceSend
+	binary.BigEndian.PutUint16(buf[1:3], length)
+	n_bytes, err := d.dev.SendFeatureReport(buf)
+	if err != nil {
+		return fmt.Errorf("TransferDataReadForceSend: %w", err)
+	}
+	if n_bytes != len(buf) {
+		return fmt.Errorf("TransferDataReadForceSend: sent unexpected number of bytes: %d", n_bytes)
+	}
+	return nil
+}
+
+// TransferStatus0 is the main status response from a transfer
+type TransferStatus0 byte
+
+const (
+	Idle          TransferStatus0 = 0x00
+	Busy          TransferStatus0 = 0x01
+	Complete      TransferStatus0 = 0x02
+	CompleteError TransferStatus0 = 0x03
+)
+
+// TransferDataReadResponse returns status and data for Data Read Request,
+// Data Write Request, and Data Read Force Send.
+func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
+	buf := make([]byte, 64)
+	buf[0] = reportIdDataReadResponse
+	n_bytes, err := d.dev.GetFeatureReport(buf)
+	if err != nil {
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: %w", err)
+	}
+	if n_bytes != len(buf) {
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: sent unexpected number of bytes: %d", n_bytes)
+	}
+	status := TransferStatus0(buf[1])
+	length := buf[2]
+	if length > 61 {
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: invalid data length: %d", length)
+	}
+	data := buf[3 : 3+length]
+	return status, data, nil
+}

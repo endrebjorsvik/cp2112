@@ -14,21 +14,21 @@ func gpioDemo(dev *cp2112.CP2112) error {
 
 	values, err := dev.GetGpioValues()
 	if err != nil {
-		return fmt.Errorf("Could not get GPIO values: %s.", err)
+		return fmt.Errorf("Could not get GPIO values: %w.", err)
 	}
 	fmt.Println("GPIOs:", values)
 	err = dev.SetGpioDirection(2, cp2112.GpioOutput)
 	if err != nil {
-		return fmt.Errorf("Could not set GPIO direction: %s.", err)
+		return fmt.Errorf("Could not set GPIO direction: %w.", err)
 	}
 	values, err = dev.GetGpioValues()
 	if err != nil {
-		return fmt.Errorf("Could not get GPIO values: %s.", err)
+		return fmt.Errorf("Could not get GPIO values: %w.", err)
 	}
 	fmt.Println("GPIOs:", values)
 	config, err := dev.GetGpioConfiguration()
 	if err != nil {
-		return fmt.Errorf("Could not get GPIO config: %s.", err)
+		return fmt.Errorf("Could not get GPIO config: %w.", err)
 	}
 	fmt.Println("Config:", config)
 
@@ -60,7 +60,7 @@ func smbusDemo(dev *cp2112.CP2112) error {
 
 	config, err := dev.GetSmbusConfiguration()
 	if err != nil {
-		return fmt.Errorf("Could not get SMBus config: %s.", err)
+		return fmt.Errorf("Could not get SMBus config: %w.", err)
 	}
 	fmt.Println("SMBus Config:", config)
 	if config.ClockSpeedHz == 100_000 {
@@ -70,22 +70,27 @@ func smbusDemo(dev *cp2112.CP2112) error {
 	}
 	err = dev.SetSmbusConfiguration(config)
 	if err != nil {
-		return fmt.Errorf("Could not set SMBus config: %s.", err)
+		return fmt.Errorf("Could not set SMBus config: %w.", err)
 	}
 	config, err = dev.GetSmbusConfiguration()
 	if err != nil {
-		return fmt.Errorf("Could not get SMBus config: %s.", err)
+		return fmt.Errorf("Could not get SMBus config: %w.", err)
 	}
 	fmt.Println("SMBus Config:", config)
 	err = dev.SetSmbusClockSpeedHz(400_000)
 	if err != nil {
-		return fmt.Errorf("Could not set SMBus clock speed: %s.", err)
+		return fmt.Errorf("Could not set SMBus clock speed: %w.", err)
 	}
 
 	err = dev.TransferDataWriteReadRequest(12, 2, []byte{2})
 	if err != nil {
-		return fmt.Errorf("Could not send WriteRead request: %s.", err)
+		return fmt.Errorf("Could not send WriteRead request: %w.", err)
 	}
+	st, data, err := dev.TransferDataReadResponse()
+	if err != nil {
+		return fmt.Errorf("Could not receive TransferDataReadResponse: %w.", err)
+	}
+	fmt.Printf("SMBus status: %d, length: %d, data: %s\n", st, len(data), data)
 	return nil
 }
 
