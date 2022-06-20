@@ -105,16 +105,13 @@ func (v Version) String() string {
 // disconnects.
 func (d *CP2112) ResetDevice() error {
 	buf := []byte{reportIdResetDevice, 0x01}
-	n_bytes, err := d.dev.SendFeatureReport(buf)
-	if err != nil {
+	if n, err := d.dev.SendFeatureReport(buf); err != nil {
 		return fmt.Errorf("ResetDevice: %w", err)
-	}
-	if n_bytes != 2 {
-		return fmt.Errorf("ResetDevice sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("ResetDevice sent unexpected number of bytes: %d", n)
 	}
 	log.WithFields(log.Fields{
 		"method": "ResetDevice",
-		"bytes":  n_bytes,
 	}).Debugf("Device was reset.")
 	return nil
 }
@@ -122,12 +119,10 @@ func (d *CP2112) ResetDevice() error {
 // GetVersionInformation reads chip version information from the device.
 func (d *CP2112) GetVersionInformation() (Version, error) {
 	buf := []byte{reportIdGetVersionInformation, 0, 0}
-	n_bytes, err := d.dev.GetFeatureReport(buf)
-	if err != nil {
+	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return Version{}, fmt.Errorf("GetVersionInformation: %w", err)
-	}
-	if n_bytes != 3 {
-		return Version{}, fmt.Errorf("GetVersionInformation received unexpected number of bytes: %d", n_bytes)
+	} else if n != 3 {
+		return Version{}, fmt.Errorf("GetVersionInformation received unexpected number of bytes: %d", n)
 	}
 	v := Version{
 		PartNumber:    buf[1],
@@ -135,7 +130,6 @@ func (d *CP2112) GetVersionInformation() (Version, error) {
 	}
 	log.WithFields(log.Fields{
 		"method":  "GetVersionInformation",
-		"bytes":   n_bytes,
 		"version": v,
 	}).Debugf("Received device version information.")
 	return v, nil
@@ -280,16 +274,13 @@ func (d *CP2112) SetGpioValues(vals [8]GpioValue, mask [8]GpioValue) error {
 	raw_val := gpioValuesToByte(vals)
 	raw_mask := gpioValuesToByte(mask)
 	req := []byte{reportIdSetGpioValues, raw_val, raw_mask}
-	n_bytes, err := d.dev.SendFeatureReport(req)
-	if err != nil {
+	if n, err := d.dev.SendFeatureReport(req); err != nil {
 		return fmt.Errorf("SetGpioValues: %w", err)
-	}
-	if n_bytes != 3 {
-		return fmt.Errorf("SetGpioValues sent unexpected number of bytes: %d", n_bytes)
+	} else if n != 3 {
+		return fmt.Errorf("SetGpioValues sent unexpected number of bytes: %d", n)
 	}
 	log.WithFields(log.Fields{
 		"method": "SetGpioValues",
-		"bytes":  n_bytes,
 		"values": vals,
 		"mask":   mask,
 	}).Debugf("Set GPIO values on device.")
@@ -315,17 +306,14 @@ func (d *CP2112) SetGpioValue(idx uint, value GpioValue) error {
 // Value bit represents the logic level driven on the pin.
 func (d *CP2112) GetGpioValues() ([8]GpioValue, error) {
 	buf := []byte{reportIdGetGpioValues, 0}
-	n_bytes, err := d.dev.GetFeatureReport(buf)
-	if err != nil {
+	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return [8]GpioValue{}, fmt.Errorf("GetGpioValues: %w", err)
-	}
-	if n_bytes != 2 {
-		return [8]GpioValue{}, fmt.Errorf("GetGpioValues received unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return [8]GpioValue{}, fmt.Errorf("GetGpioValues received unexpected number of bytes: %d", n)
 	}
 	vals := byteToGpioValues(buf[1])
 	log.WithFields(log.Fields{
 		"method": "GetGpioValues",
-		"bytes":  n_bytes,
 		"values": vals,
 	}).Debugf("Got GPIO values of device.")
 
@@ -398,12 +386,10 @@ func gpioConfigurationFromReport(buf []byte) (GpioConfiguration, error) {
 // the chip.
 func (d *CP2112) GetGpioConfiguration() (GpioConfiguration, error) {
 	buf := []byte{reportIdGpioConfiguration, 0, 0, 0, 0}
-	n_bytes, err := d.dev.GetFeatureReport(buf)
-	if err != nil {
+	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return GpioConfiguration{}, fmt.Errorf("GetGpioConfiguration: %w", err)
-	}
-	if n_bytes != 5 {
-		return GpioConfiguration{}, fmt.Errorf("GetGpioConfiguration received unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return GpioConfiguration{}, fmt.Errorf("GetGpioConfiguration received unexpected number of bytes: %d", n)
 	}
 	conf, err := gpioConfigurationFromReport(buf)
 	if err != nil {
@@ -411,7 +397,6 @@ func (d *CP2112) GetGpioConfiguration() (GpioConfiguration, error) {
 	}
 	log.WithFields(log.Fields{
 		"method":        "GetGpioConfiguration",
-		"bytes":         n_bytes,
 		"configuration": conf,
 	}).Debugf("Got GPIO configuration of device.")
 	return conf, nil
@@ -425,16 +410,13 @@ func (d *CP2112) GetGpioConfiguration() (GpioConfiguration, error) {
 // special functionality on GPIO0_TXT, GPIO1_RXT, and GPIO7_CLK.
 func (d *CP2112) SetGpioConfiguration(c GpioConfiguration) error {
 	buf := c.toReport()
-	n_bytes, err := d.dev.SendFeatureReport(buf)
-	if err != nil {
+	if n, err := d.dev.SendFeatureReport(buf); err != nil {
 		return fmt.Errorf("SetGpioConfiguration: %w", err)
-	}
-	if n_bytes != 5 {
-		return fmt.Errorf("SetGpioConfiguration sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("SetGpioConfiguration sent unexpected number of bytes: %d", n)
 	}
 	log.WithFields(log.Fields{
 		"method":        "SetGpioConfiguration",
-		"bytes":         n_bytes,
 		"configuration": c,
 	}).Debugf("Set GPIO configuration of device.")
 	return nil
@@ -545,12 +527,10 @@ func smbusConfigurationFromReport(buf []byte) (SmbusConfiguration, error) {
 func (d *CP2112) GetSmbusConfiguration() (SmbusConfiguration, error) {
 	buf := make([]byte, 14)
 	buf[0] = reportIdSmbusConfiguration
-	n_bytes, err := d.dev.GetFeatureReport(buf)
-	if err != nil {
+	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration: %w", err)
-	}
-	if n_bytes != 14 {
-		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration received unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration received unexpected number of bytes: %d", n)
 	}
 	return smbusConfigurationFromReport(buf)
 }
@@ -561,12 +541,10 @@ func (d *CP2112) SetSmbusConfiguration(c SmbusConfiguration) error {
 	if err != nil {
 		return fmt.Errorf("SetSmbusConfiguration: %w", err)
 	}
-	n_bytes, err := d.dev.SendFeatureReport(buf)
-	if err != nil {
+	if n, err := d.dev.SendFeatureReport(buf); err != nil {
 		return fmt.Errorf("SetSmbusConfiguration: %w", err)
-	}
-	if n_bytes != 14 {
-		return fmt.Errorf("SetSmbusConfiguration sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("SetSmbusConfiguration sent unexpected number of bytes: %d", n)
 	}
 	return nil
 }
@@ -611,12 +589,10 @@ func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
 	buf[0] = reportIdDataReadRequest
 	buf[1] = deviceAddr
 	binary.BigEndian.PutUint16(buf[2:4], length)
-	n_bytes, err := d.dev.Write(buf)
-	if err != nil {
+	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataReadRequest: %w", err)
-	}
-	if n_bytes != 4 {
-		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n_bytes)
+	} else if n != 4 {
+		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n)
 	}
 	return nil
 }
@@ -650,12 +626,10 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	binary.BigEndian.PutUint16(buf[2:4], length)
 	buf[4] = byte(targetAddrLen)
 	copy(buf[5:], targetAddr)
-	n_bytes, err := d.dev.Write(buf)
-	if err != nil {
+	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataWriteReadRequest: %w", err)
-	}
-	if n_bytes != len(buf) {
-		return fmt.Errorf("TransferDataWriteReadRequest: sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("TransferDataWriteReadRequest: sent unexpected number of bytes: %d", n)
 	}
 	return nil
 }
@@ -678,12 +652,10 @@ func (d *CP2112) TransferDataReadForceSend(length uint16) error {
 	buf := make([]byte, 3)
 	buf[0] = reportIdDataReadForceSend
 	binary.BigEndian.PutUint16(buf[1:3], length)
-	n_bytes, err := d.dev.Write(buf)
-	if err != nil {
+	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataReadForceSend: %w", err)
-	}
-	if n_bytes != len(buf) {
-		return fmt.Errorf("TransferDataReadForceSend: sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("TransferDataReadForceSend: sent unexpected number of bytes: %d", n)
 	}
 	return nil
 }
@@ -702,13 +674,10 @@ const (
 // Data Write Request, and Data Read Force Send.
 func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 	buf := make([]byte, 64)
-	n_bytes, err := d.dev.Read(buf)
-	if err != nil {
+	if n, err := d.dev.Read(buf); err != nil {
 		return 0, nil, fmt.Errorf("TransferDataReadResponse: %w", err)
-	}
-	// XXX: Perhaps incorrect.
-	if n_bytes != len(buf) {
-		return 0, nil, fmt.Errorf("TransferDataReadResponse: received unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: received unexpected number of bytes: %d", n)
 	}
 	if buf[0] != reportIdDataReadResponse {
 		return 0, nil, fmt.Errorf("TransferDataReadResponse: unexpected report ID: %02x", buf[0])
@@ -740,12 +709,10 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 	buf[1] = deviceAddr
 	buf[2] = byte(dataLen)
 	copy(buf[3:], data)
-	n_bytes, err := d.dev.Write(buf)
-	if err != nil {
+	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataWrite: %w", err)
-	}
-	if n_bytes != len(buf) {
-		return fmt.Errorf("TransferDataWrite: sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("TransferDataWrite: sent unexpected number of bytes: %d", n)
 	}
 	return nil
 }
@@ -753,12 +720,10 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 // TransferStatusRequest requests a transfer status.
 func (d *CP2112) TransferStatusRequest() error {
 	buf := []byte{reportIdTransferStatusRequest, 0x01}
-	n_bytes, err := d.dev.Write(buf)
-	if err != nil {
+	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataReadRequest: %w", err)
-	}
-	if n_bytes != len(buf) {
-		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n)
 	}
 	return nil
 }
@@ -789,12 +754,10 @@ type TransferStatus struct {
 // TransferStatusResponse requests a transfer status.
 func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 	buf := make([]byte, 7)
-	n_bytes, err := d.dev.Read(buf)
-	if err != nil {
+	if n, err := d.dev.Read(buf); err != nil {
 		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: %w", err)
-	}
-	if n_bytes != len(buf) {
-		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: sent unexpected number of bytes: %d", n)
 	}
 	if buf[0] != reportIdTransferStatusResponse {
 		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: unexpected report ID: %02x", buf[0])
@@ -810,12 +773,10 @@ func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 // TransferCancel cancels the ongoing transfer
 func (d *CP2112) TransferCancel() error {
 	buf := []byte{reportIdCancelTransfer, 0x01}
-	n_bytes, err := d.dev.Write(buf)
-	if err != nil {
+	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferCancel: %w", err)
-	}
-	if n_bytes != len(buf) {
-		return fmt.Errorf("TransferCancel: sent unexpected number of bytes: %d", n_bytes)
+	} else if n != len(buf) {
+		return fmt.Errorf("TransferCancel: sent unexpected number of bytes: %d", n)
 	}
 	return nil
 }
