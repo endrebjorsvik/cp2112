@@ -611,7 +611,7 @@ func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
 	buf[0] = reportIdDataReadRequest
 	buf[1] = deviceAddr
 	binary.BigEndian.PutUint16(buf[2:4], length)
-	n_bytes, err := d.dev.SendFeatureReport(buf)
+	n_bytes, err := d.dev.Write(buf)
 	if err != nil {
 		return fmt.Errorf("TransferDataReadRequest: %w", err)
 	}
@@ -650,7 +650,7 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	binary.BigEndian.PutUint16(buf[2:4], length)
 	buf[4] = byte(targetAddrLen)
 	copy(buf[5:], targetAddr)
-	n_bytes, err := d.dev.SendFeatureReport(buf)
+	n_bytes, err := d.dev.Write(buf)
 	if err != nil {
 		return fmt.Errorf("TransferDataWriteReadRequest: %w", err)
 	}
@@ -675,10 +675,10 @@ func (d *CP2112) TransferDataReadForceSend(length uint16) error {
 	if err := checkReadLength(length); err != nil {
 		return fmt.Errorf("TransferDataReadForceSend: %w", err)
 	}
-	buf := make([]byte, 2)
+	buf := make([]byte, 3)
 	buf[0] = reportIdDataReadForceSend
 	binary.BigEndian.PutUint16(buf[1:3], length)
-	n_bytes, err := d.dev.SendFeatureReport(buf)
+	n_bytes, err := d.dev.Write(buf)
 	if err != nil {
 		return fmt.Errorf("TransferDataReadForceSend: %w", err)
 	}
@@ -702,13 +702,16 @@ const (
 // Data Write Request, and Data Read Force Send.
 func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 	buf := make([]byte, 64)
-	buf[0] = reportIdDataReadResponse
-	n_bytes, err := d.dev.GetFeatureReport(buf)
+	n_bytes, err := d.dev.Read(buf)
 	if err != nil {
 		return 0, nil, fmt.Errorf("TransferDataReadResponse: %w", err)
 	}
+	// XXX: Perhaps incorrect.
 	if n_bytes != len(buf) {
-		return 0, nil, fmt.Errorf("TransferDataReadResponse: sent unexpected number of bytes: %d", n_bytes)
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: received unexpected number of bytes: %d", n_bytes)
+	}
+	if buf[0] != reportIdDataReadResponse {
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: unexpected report ID: %02x", buf[0])
 	}
 	status := TransferStatus0(buf[1])
 	length := buf[2]
@@ -717,4 +720,89 @@ func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 	}
 	data := buf[3 : 3+length]
 	return status, data, nil
+}
+
+// TransferDataWrite initiates a write operation. deviceAddr is the 7-bit address
+// of the device to which data is being sent. The address must be between 0xFE and
+// 0x02 (the least significant bit is the read/write bit and must be 0). data is
+// the actual data being sent over the SMBus to the device. The host can transmit
+// 1 to 61 bytes to the CP2112.
+func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
+	if err := checkDeviceAddress(deviceAddr); err != nil {
+		return fmt.Errorf("TransferDataWrite: %w", err)
+	}
+	dataLen := len(data)
+	if dataLen < 1 || dataLen > 61 {
+		return fmt.Errorf("TransferDataWrite: invalid data length: %d. Must be 1 to 61 bytes", dataLen)
+	}
+	buf := make([]byte, 3+dataLen)
+	buf[0] = reportIdDataWrite
+	buf[1] = deviceAddr
+	buf[2] = byte(dataLen)
+	copy(buf[3:], data)
+	n_bytes, err := d.dev.Write(buf)
+	if err != nil {
+		return fmt.Errorf("TransferDataWrite: %w", err)
+	}
+	if n_bytes != len(buf) {
+		return fmt.Errorf("TransferDataWrite: sent unexpected number of bytes: %d", n_bytes)
+	}
+	return nil
+}
+
+// TransferStatusRequest requests a transfer status.
+func (d *CP2112) TransferStatusRequest() error {
+	buf := []byte{reportIdTransferStatusRequest, 0x01}
+	n_bytes, err := d.dev.Write(buf)
+	if err != nil {
+		return fmt.Errorf("TransferDataReadRequest: %w", err)
+	}
+	if n_bytes != len(buf) {
+		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n_bytes)
+	}
+	return nil
+}
+
+type TransferStatus1 byte
+
+const (
+	AddressAcked    TransferStatus1 = 0x00
+	AddressNacked   TransferStatus1 = 0x01
+	ReadInProgress  TransferStatus1 = 0x02
+	WriteInProgress TransferStatus1 = 0x03
+
+	TimeoutAddressNacked TransferStatus1 = 0x00
+	TimeoutBusNotFree    TransferStatus1 = 0x01
+	ArbitrationLost      TransferStatus1 = 0x02
+	ReadIncomplete       TransferStatus1 = 0x03
+	WriteIncomplete      TransferStatus1 = 0x04
+	SuccededAfterRetries TransferStatus1 = 0x04
+)
+
+type TransferStatus struct {
+	Status0 TransferStatus0
+	Status1 TransferStatus1
+	Status2 uint16
+	Status3 uint16
+}
+
+// TransferStatusResponse requests a transfer status.
+func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
+	buf := make([]byte, 7)
+	n_bytes, err := d.dev.Read(buf)
+	if err != nil {
+		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: %w", err)
+	}
+	if n_bytes != len(buf) {
+		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: sent unexpected number of bytes: %d", n_bytes)
+	}
+	if buf[0] != reportIdTransferStatusResponse {
+		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: unexpected report ID: %02x", buf[0])
+	}
+	return TransferStatus{
+		Status0: TransferStatus0(buf[1]),
+		Status1: TransferStatus1(buf[2]),
+		Status2: binary.BigEndian.Uint16(buf[3:5]),
+		Status3: binary.BigEndian.Uint16(buf[5:7]),
+	}, nil
 }

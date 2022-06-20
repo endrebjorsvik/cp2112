@@ -82,15 +82,26 @@ func smbusDemo(dev *cp2112.CP2112) error {
 		return fmt.Errorf("Could not set SMBus clock speed: %w.", err)
 	}
 
-	err = dev.TransferDataWriteReadRequest(12, 2, []byte{2})
-	if err != nil {
+	if err := dev.TransferDataWriteReadRequest(12, 2, []byte{2}); err != nil {
 		return fmt.Errorf("Could not send WriteRead request: %w.", err)
+	}
+	if err := dev.TransferDataReadForceSend(2); err != nil {
+		return fmt.Errorf("Could not force read: %w.", err)
 	}
 	st, data, err := dev.TransferDataReadResponse()
 	if err != nil {
 		return fmt.Errorf("Could not receive TransferDataReadResponse: %w.", err)
 	}
 	fmt.Printf("SMBus status: %d, length: %d, data: %s\n", st, len(data), data)
+
+	if err := dev.TransferStatusRequest(); err != nil {
+		return fmt.Errorf("Could not request transfer status: %w", err)
+	}
+	status, err := dev.TransferStatusResponse()
+	if err != nil {
+		return fmt.Errorf("Could not read transfer status: %w", err)
+	}
+	fmt.Printf("Transfer status: %d\n", status)
 	return nil
 }
 
