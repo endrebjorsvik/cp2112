@@ -82,6 +82,76 @@ const (
 	smbusClockSpeedHzMax uint32 = 400_000
 )
 
+// ErrSentUnexpectedBytes indicates that the underlaying HID API sends an unexpected number of bytes.
+type ErrSentUnexpectedBytes int
+
+func (e ErrSentUnexpectedBytes) Error() string {
+	return fmt.Sprintf("sent unexpected number of bytes: %d", e)
+}
+
+// ErrRecvUnexpectedBytes indicates that the underlaying HID API receives an unexpected number of bytes.
+type ErrRecvUnexpectedBytes int
+
+func (e ErrRecvUnexpectedBytes) Error() string {
+	return fmt.Sprintf("received unexpected number of bytes: %d", e)
+}
+
+// ErrUnexpectedReportLength indicates that the HID report parser received a report with unexpected length.
+type ErrUnexpectedReportLength int
+
+func (e ErrUnexpectedReportLength) Error() string {
+	return fmt.Sprintf("unexpected report length: %d", e)
+}
+
+// ErrUnexpectedReportLength indicates that the HID report parser received a report with unexpected HID report ID.
+type ErrUnexpectedReportID byte
+
+func (e ErrUnexpectedReportID) Error() string {
+	return fmt.Sprintf("unexpected report ID: %02x", int(e))
+}
+
+// ErrGpioIndexOutOfRange indicates that an invalid GPIO index was accessed.
+type ErrGpioIndexOutOfRange uint
+
+func (e ErrGpioIndexOutOfRange) Error() string {
+	return fmt.Sprintf("GPIO index %d is out of range", e)
+}
+
+// ErrInvalidSmbusClockSpeed indicates that an invalid SMBus/I2C clock speed was selected.
+type ErrInvalidSmbusClockSpeed uint32
+
+func (e ErrInvalidSmbusClockSpeed) Error() string {
+	return fmt.Sprintf("invalid SMBus/I2C clock speed: %d Hz", e)
+}
+
+// ErrInvalidDeviceAddress indicates that an invalid SMBus/I2C device address was specified.
+type ErrInvalidDeviceAddress byte
+
+func (e ErrInvalidDeviceAddress) Error() string {
+	return fmt.Sprintf("invalid device address: 0x%02x. LSB must be zero", int(e))
+}
+
+// ErrInvalidTransferReadRequestLength indicates that an invalid read request data length was specified.
+type ErrInvalidTransferReadRequestLength uint16
+
+func (e ErrInvalidTransferReadRequestLength) Error() string {
+	return fmt.Sprintf("invalid data read length: %d. Must be between 1 and 512", e)
+}
+
+// ErrInvalidTransferWriteRequestLength indicates that an invalid write request data length was specified.
+type ErrInvalidTransferWriteRequestLength uint16
+
+func (e ErrInvalidTransferWriteRequestLength) Error() string {
+	return fmt.Sprintf("invalid data write length: %d. Must be between 1 and 61", e)
+}
+
+// ErrInvalidTargetAddressLength indicates that an invalid targetAddress length was specified.
+type ErrInvalidTargetAddressLength int
+
+func (e ErrInvalidTargetAddressLength) Error() string {
+	return fmt.Sprintf("invalid targetAddress length: %d", e)
+}
+
 // Version holds the device version information. PartNumber indicates the
 // device part number. The CP2112 always returns 0x0C. DeviceVersion is the
 // version of the device. This value is not programmable over the HID interface.
@@ -108,7 +178,7 @@ func (d *CP2112) ResetDevice() error {
 	if n, err := d.dev.SendFeatureReport(buf); err != nil {
 		return fmt.Errorf("ResetDevice: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("ResetDevice sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("ResetDevice: %w", ErrSentUnexpectedBytes(n))
 	}
 	log.WithFields(log.Fields{
 		"method": "ResetDevice",
@@ -122,7 +192,7 @@ func (d *CP2112) GetVersionInformation() (Version, error) {
 	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return Version{}, fmt.Errorf("GetVersionInformation: %w", err)
 	} else if n != 3 {
-		return Version{}, fmt.Errorf("GetVersionInformation received unexpected number of bytes: %d", n)
+		return Version{}, fmt.Errorf("GetVersionInformation: %w", ErrRecvUnexpectedBytes(n))
 	}
 	v := Version{
 		PartNumber:    buf[1],
@@ -249,7 +319,7 @@ func gpioDriveToByte(vals [8]GpioDrive) byte {
 
 func checkGpioIndex(idx uint) error {
 	if idx > 7 {
-		return fmt.Errorf("GPIO index %d is out of range", idx)
+		return ErrGpioIndexOutOfRange(idx)
 	}
 	return nil
 }
@@ -277,7 +347,7 @@ func (d *CP2112) SetGpioValues(vals [8]GpioValue, mask [8]GpioValue) error {
 	if n, err := d.dev.SendFeatureReport(req); err != nil {
 		return fmt.Errorf("SetGpioValues: %w", err)
 	} else if n != 3 {
-		return fmt.Errorf("SetGpioValues sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("SetGpioValues: %w", ErrSentUnexpectedBytes(n))
 	}
 	log.WithFields(log.Fields{
 		"method": "SetGpioValues",
@@ -309,7 +379,7 @@ func (d *CP2112) GetGpioValues() ([8]GpioValue, error) {
 	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return [8]GpioValue{}, fmt.Errorf("GetGpioValues: %w", err)
 	} else if n != len(buf) {
-		return [8]GpioValue{}, fmt.Errorf("GetGpioValues received unexpected number of bytes: %d", n)
+		return [8]GpioValue{}, fmt.Errorf("GetGpioValues: %w", ErrRecvUnexpectedBytes(n))
 	}
 	vals := byteToGpioValues(buf[1])
 	log.WithFields(log.Fields{
@@ -361,10 +431,10 @@ func (c *GpioConfiguration) toReport() []byte {
 
 func gpioConfigurationFromReport(buf []byte) (GpioConfiguration, error) {
 	if len(buf) != 5 {
-		return GpioConfiguration{}, fmt.Errorf("unexpected GPIO configuration report length: %d", len(buf))
+		return GpioConfiguration{}, fmt.Errorf("GPIO configuration: %w", ErrUnexpectedReportLength(len(buf)))
 	}
 	if buf[0] != reportIdGpioConfiguration {
-		return GpioConfiguration{}, fmt.Errorf("unexpected GPIO configuration report ID: %d", buf[0])
+		return GpioConfiguration{}, fmt.Errorf("GPIO configuration: %w", ErrUnexpectedReportID(buf[0]))
 	}
 	direction := byteToGpioDirections(buf[1])
 	drive := byteToGpioDrives(buf[2])
@@ -389,7 +459,7 @@ func (d *CP2112) GetGpioConfiguration() (GpioConfiguration, error) {
 	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return GpioConfiguration{}, fmt.Errorf("GetGpioConfiguration: %w", err)
 	} else if n != len(buf) {
-		return GpioConfiguration{}, fmt.Errorf("GetGpioConfiguration received unexpected number of bytes: %d", n)
+		return GpioConfiguration{}, fmt.Errorf("GetGpioConfiguration: %w", ErrRecvUnexpectedBytes(n))
 	}
 	conf, err := gpioConfigurationFromReport(buf)
 	if err != nil {
@@ -413,7 +483,7 @@ func (d *CP2112) SetGpioConfiguration(c GpioConfiguration) error {
 	if n, err := d.dev.SendFeatureReport(buf); err != nil {
 		return fmt.Errorf("SetGpioConfiguration: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("SetGpioConfiguration sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("SetGpioConfiguration: %w", ErrSentUnexpectedBytes(n))
 	}
 	log.WithFields(log.Fields{
 		"method":        "SetGpioConfiguration",
@@ -483,7 +553,7 @@ type SmbusConfiguration struct {
 
 func (c SmbusConfiguration) toReport() ([]byte, error) {
 	if (c.ClockSpeedHz < smbusClockSpeedHzMin) || (c.ClockSpeedHz > smbusClockSpeedHzMax) {
-		return nil, fmt.Errorf("invalid SMBus/I2C clock speed: %d Hz", c.ClockSpeedHz)
+		return nil, ErrInvalidSmbusClockSpeed(c.ClockSpeedHz)
 	}
 	buf := make([]byte, 14)
 	buf[0] = reportIdSmbusConfiguration
@@ -507,10 +577,10 @@ func (c SmbusConfiguration) toReport() ([]byte, error) {
 
 func smbusConfigurationFromReport(buf []byte) (SmbusConfiguration, error) {
 	if len(buf) != 14 {
-		return SmbusConfiguration{}, fmt.Errorf("unexpected SMBus configuration report length: %d", len(buf))
+		return SmbusConfiguration{}, fmt.Errorf("SMBus configuration: %w", ErrUnexpectedReportLength(len(buf)))
 	}
 	if buf[0] != reportIdSmbusConfiguration {
-		return SmbusConfiguration{}, fmt.Errorf("unexpected SMBus configuration report ID: %d", buf[0])
+		return SmbusConfiguration{}, fmt.Errorf("SMBus configuration: %w", ErrUnexpectedReportID(buf[0]))
 	}
 	return SmbusConfiguration{
 		ClockSpeedHz:  binary.BigEndian.Uint32(buf[1:5]),
@@ -530,7 +600,7 @@ func (d *CP2112) GetSmbusConfiguration() (SmbusConfiguration, error) {
 	if n, err := d.dev.GetFeatureReport(buf); err != nil {
 		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration: %w", err)
 	} else if n != len(buf) {
-		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration received unexpected number of bytes: %d", n)
+		return SmbusConfiguration{}, fmt.Errorf("GetSmbusConfiguration: %w", ErrRecvUnexpectedBytes(n))
 	}
 	return smbusConfigurationFromReport(buf)
 }
@@ -544,7 +614,7 @@ func (d *CP2112) SetSmbusConfiguration(c SmbusConfiguration) error {
 	if n, err := d.dev.SendFeatureReport(buf); err != nil {
 		return fmt.Errorf("SetSmbusConfiguration: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("SetSmbusConfiguration sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("SetSmbusConfiguration: %w", ErrSentUnexpectedBytes(n))
 	}
 	return nil
 }
@@ -570,7 +640,7 @@ func (d *CP2112) SetSmbusClockSpeedHz(clockSpeedHz uint32) error {
 
 func checkDeviceAddress(addr byte) error {
 	if (addr & 1) == 1 {
-		return fmt.Errorf("invalid device address: 0x%02x. LSB must be zero", addr)
+		return ErrInvalidDeviceAddress(addr)
 	}
 	return nil
 }
@@ -582,8 +652,8 @@ func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
 	if err := checkDeviceAddress(deviceAddr); err != nil {
 		return fmt.Errorf("TransferDataReadRequest: %w", err)
 	}
-	if length < 1 || length > 512 {
-		return fmt.Errorf("TransferDataReadRequest: invalid read length: %d. Must be between 1 and 512", length)
+	if err := checkReadLength(length); err != nil {
+		return fmt.Errorf("TransferDataReadRequest: %w", err)
 	}
 	buf := make([]byte, 4)
 	buf[0] = reportIdDataReadRequest
@@ -592,14 +662,14 @@ func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
 	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataReadRequest: %w", err)
 	} else if n != 4 {
-		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("TransferDataReadRequest: %w", ErrSentUnexpectedBytes(n))
 	}
 	return nil
 }
 
 func checkReadLength(length uint16) error {
 	if length < 1 || length > 512 {
-		return fmt.Errorf("invalid read length: %d. Must be between 1 and 512", length)
+		return ErrInvalidTransferReadRequestLength(length)
 	}
 	return nil
 }
@@ -618,7 +688,7 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	}
 	targetAddrLen := len(targetAddr)
 	if len(targetAddr) < 1 || len(targetAddr) > 16 {
-		return fmt.Errorf("TransferDataWriteReadRequest: invalid targetAddress length: %d", len(targetAddr))
+		return fmt.Errorf("TransferDataWriteReadRequest: %w", ErrInvalidTargetAddressLength(len(targetAddr)))
 	}
 	buf := make([]byte, 5+targetAddrLen)
 	buf[0] = reportIdDataWriteReadRequest
@@ -629,7 +699,7 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataWriteReadRequest: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("TransferDataWriteReadRequest: sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("TransferDataWriteReadRequest: %w", ErrSentUnexpectedBytes(n))
 	}
 	return nil
 }
@@ -655,7 +725,7 @@ func (d *CP2112) TransferDataReadForceSend(length uint16) error {
 	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataReadForceSend: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("TransferDataReadForceSend: sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("TransferDataReadForceSend: %w", ErrSentUnexpectedBytes(n))
 	}
 	return nil
 }
@@ -677,15 +747,15 @@ func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 	if n, err := d.dev.Read(buf); err != nil {
 		return 0, nil, fmt.Errorf("TransferDataReadResponse: %w", err)
 	} else if n != len(buf) {
-		return 0, nil, fmt.Errorf("TransferDataReadResponse: received unexpected number of bytes: %d", n)
+		return 0, nil, fmt.Errorf("TransferDataReadResponse:: %w", ErrRecvUnexpectedBytes(n))
 	}
 	if buf[0] != reportIdDataReadResponse {
-		return 0, nil, fmt.Errorf("TransferDataReadResponse: unexpected report ID: %02x", buf[0])
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: %w", ErrUnexpectedReportID(buf[0]))
 	}
 	status := TransferStatus0(buf[1])
 	length := buf[2]
 	if length > 61 {
-		return 0, nil, fmt.Errorf("TransferDataReadResponse: invalid data length: %d", length)
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: report contains invalid data length: %d", length)
 	}
 	data := buf[3 : 3+length]
 	return status, data, nil
@@ -702,7 +772,7 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 	}
 	dataLen := len(data)
 	if dataLen < 1 || dataLen > 61 {
-		return fmt.Errorf("TransferDataWrite: invalid data length: %d. Must be 1 to 61 bytes", dataLen)
+		return fmt.Errorf("TransferDataWrite: %w", ErrInvalidTransferWriteRequestLength(dataLen))
 	}
 	buf := make([]byte, 3+dataLen)
 	buf[0] = reportIdDataWrite
@@ -712,7 +782,7 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataWrite: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("TransferDataWrite: sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("TransferDataWrite: %w", ErrSentUnexpectedBytes(n))
 	}
 	return nil
 }
@@ -723,7 +793,7 @@ func (d *CP2112) TransferStatusRequest() error {
 	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferDataReadRequest: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("TransferDataReadRequest: sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("TransferDataReadRequest: %w", ErrSentUnexpectedBytes(n))
 	}
 	return nil
 }
@@ -758,10 +828,10 @@ func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 	if n, err := d.dev.Read(buf); err != nil {
 		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: %w", err)
 	} else if n != len(buf) {
-		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: sent unexpected number of bytes: %d", n)
+		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: %w", ErrSentUnexpectedBytes(n))
 	}
 	if buf[0] != reportIdTransferStatusResponse {
-		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: unexpected report ID: %02x", buf[0])
+		return TransferStatus{}, fmt.Errorf("TransferStatusResponse: %w", ErrUnexpectedReportID(buf[0]))
 	}
 	return TransferStatus{
 		Status0: TransferStatus0(buf[1]),
@@ -777,7 +847,7 @@ func (d *CP2112) TransferCancel() error {
 	if n, err := d.dev.Write(buf); err != nil {
 		return fmt.Errorf("TransferCancel: %w", err)
 	} else if n != len(buf) {
-		return fmt.Errorf("TransferCancel: sent unexpected number of bytes: %d", n)
+		return fmt.Errorf("TransferCancel: %w", ErrSentUnexpectedBytes(n))
 	}
 	return nil
 }
