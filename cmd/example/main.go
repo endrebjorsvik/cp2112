@@ -7,7 +7,7 @@ import (
 
 	"github.com/endrebjorsvik/cp2112"
 	log "github.com/sirupsen/logrus"
-	"github.com/sstallion/go-hid"
+	hid "github.com/sstallion/go-hid"
 )
 
 func gpioDemo(dev *cp2112.CP2112) error {
