@@ -6,7 +6,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/sstallion/go-hid"
+	hid "github.com/sstallion/go-hid"
 )
 
 // CP2112 is the primary type for interacting with the SiLabs CP2112
