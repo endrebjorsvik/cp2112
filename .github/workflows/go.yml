@@ -19,7 +19,10 @@ jobs:
         go-version: 1.18
 
     - name: Additional setup
-      run: go install golang.org/x/tools/cmd/stringer
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libhidapi
+        go install golang.org/x/tools/cmd/stringer
 
     - name: Generate
       run: go generate -v ./...
