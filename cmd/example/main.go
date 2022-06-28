@@ -162,13 +162,13 @@ func main() {
 
 	if *runGpio {
 		if err := gpioDemo(dev); err != nil {
-			log.Fatalf("gpioDemo error: %w", err)
+			log.Fatalf("gpioDemo error: %s", err)
 		}
 	}
 
 	if *runSmbus {
 		if err := smbusDemo(dev); err != nil {
-			log.Fatalf("smbusDemo error: %w", err)
+			log.Fatalf("smbusDemo error: %s", err)
 		}
 	}
 }
