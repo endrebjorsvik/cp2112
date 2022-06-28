@@ -42,7 +42,7 @@ func FindCP2112() ([]DevID, error) {
 func NewCP2112(vid, pid uint16, serial string) (*CP2112, error) {
 	dev, err := hid.Open(vid, pid, serial)
 	if err != nil {
-		return nil, fmt.Errorf("could not open HID device %d:%d (SN: %s): %w", pid, vid, serial, err)
+		return nil, fmt.Errorf("could not open HID device 0x%04x:0x%04x (SN: %s): %w", pid, vid, serial, err)
 	}
 	log.WithFields(log.Fields{
 		"vid":    vid,
@@ -766,7 +766,7 @@ func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 	status := TransferStatus0(buf[1])
 	length := buf[2]
 	if length > 61 {
-		return 0, nil, fmt.Errorf("TransferDataReadResponse: report contains invalid data length: %d", length)
+		return 0, nil, fmt.Errorf("TransferDataReadResponse: report contains invalid data length: %v", length)
 	}
 	data := buf[3 : 3+length]
 	return status, data, nil
@@ -849,6 +849,8 @@ const (
 	ReadInProgress  TransferBusyStatus = 0x02 // Data read in progress.
 	WriteInProgress TransferBusyStatus = 0x03 // Data write in progress.
 
+	InvalidBusyStatus TransferBusyStatus = 0xff // Only used as return value when no other status is valid.
+
 	// Belongs to CompleteError. All are error conditions.
 	TimeoutAddressNacked TransferCompleteStatus = 0x00 // Timeout address NACKed.
 	TimeoutBusNotFree    TransferCompleteStatus = 0x01 // Timeout bus not free (SCL Low Timeout).
@@ -859,7 +861,6 @@ const (
 	// Belongs to CompleteSuccess.
 	SuccededAfterRetries TransferCompleteStatus = 0x05 // Succeeded after NumRetries retries.
 
-	InvalidBusyStatus     TransferBusyStatus     = 0xff // Only used as return value when no other status is valid.
 	InvalidCompleteStatus TransferCompleteStatus = 0xff // Only used as return value when no other status is valid.
 )
 
@@ -891,12 +892,30 @@ func (s *TransferStatus) IsCompleteSuccess() (bool, *TransferCompleteInfo, error
 		return false, nil, nil
 	}
 	if s.completeStatus != SuccededAfterRetries {
-		return false, nil, fmt.Errorf("unexpected success status: %d", s.completeStatus)
+		return false, nil, fmt.Errorf("unexpected success status: %v", s.completeStatus)
 	}
 	return true, &TransferCompleteInfo{
 		NumRetries:       s.numRetries,
 		NumBytesReceived: s.numBytesReceived,
 	}, nil
+}
+
+func (s *TransferStatus) String() string {
+	if s.IsIdle() {
+		return "idle"
+	}
+	if ok, status := s.IsBusy(); ok {
+		return fmt.Sprintf("busy with status %s", status)
+	}
+	if ok, status := s.IsCompleteError(); ok {
+		return fmt.Sprintf("transfer failed with error %s", status)
+	}
+	if ok, status, err := s.IsCompleteSuccess(); err != nil {
+		return err.Error()
+	} else if ok {
+		return status.String()
+	}
+	return fmt.Sprintf("%d", s)
 }
 
 type TransferCompleteInfo struct {
@@ -905,7 +924,7 @@ type TransferCompleteInfo struct {
 }
 
 func (s *TransferCompleteInfo) String() string {
-	return fmt.Sprintf("transfered %d bytes with %d retries", s.NumBytesReceived, s.NumRetries)
+	return fmt.Sprintf("transfered %v bytes with %v retries", s.NumBytesReceived, s.NumRetries)
 }
 
 // TransferStatusResponse receives the status response from the previously

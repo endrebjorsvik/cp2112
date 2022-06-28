@@ -92,7 +92,7 @@ func smbusDemo(dev *cp2112.CP2112) error {
 	if err != nil {
 		return fmt.Errorf("Could not receive TransferDataReadResponse: %w.", err)
 	}
-	fmt.Printf("SMBus status: %d, length: %d, data: %s\n", st, len(data), data)
+	fmt.Printf("SMBus status: %v, length: %v, data: %s\n", st, len(data), data)
 
 	if err := dev.TransferStatusRequest(); err != nil {
 		return fmt.Errorf("Could not request transfer status: %w", err)
@@ -101,7 +101,7 @@ func smbusDemo(dev *cp2112.CP2112) error {
 	if err != nil {
 		return fmt.Errorf("Could not read transfer status: %w", err)
 	}
-	fmt.Printf("Transfer status: %d\n", status)
+	fmt.Printf("Transfer status: %v\n", status.String())
 	return nil
 }
 
@@ -120,7 +120,7 @@ func main() {
 	fmt.Println("Listing all connected USB HID devices.")
 	hid.Enumerate(hid.VendorIDAny, hid.ProductIDAny,
 		func(info *hid.DeviceInfo) error {
-			fmt.Printf(" %d. %s: ID %04x:%04x %s %s, SN: %s, Rel: %d, %d %d, if: %d.\n",
+			fmt.Printf(" %v. %s: ID %04x:%04x %s %s, SN: %s, Rel: %v, %v %v, if: %v.\n",
 				idx,
 				info.Path,
 				info.VendorID,
@@ -144,7 +144,7 @@ func main() {
 		log.Fatalf("Could not find any CP2112.")
 	}
 	if *deviceIdx >= len(cpids) {
-		log.Fatalf("Invalid device index: %d", *deviceIdx)
+		log.Fatalf("Invalid device index: %v", *deviceIdx)
 	}
 	cpid := cpids[*deviceIdx]
 
