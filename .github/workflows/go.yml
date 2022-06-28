@@ -27,6 +27,11 @@ jobs:
     - name: Generate
       run: go generate -v ./...
 
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3.1.0
+      with:
+        version: latest
+
     - name: Build
       run: go build -v ./...
 
