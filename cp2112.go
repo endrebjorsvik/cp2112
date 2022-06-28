@@ -750,16 +750,6 @@ func (d *CP2112) TransferDataReadForceSend(length uint16) error {
 	return nil
 }
 
-// TransferStatus0 is the main status response from a transfer
-type TransferStatus0 byte
-
-const (
-	Idle          TransferStatus0 = 0x00
-	Busy          TransferStatus0 = 0x01
-	Complete      TransferStatus0 = 0x02
-	CompleteError TransferStatus0 = 0x03
-)
-
 // TransferDataReadResponse returns status and data for Data Read Request,
 // Data Write Request, and Data Read Force Send.
 func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
@@ -821,27 +811,41 @@ func (d *CP2112) TransferStatusRequest() error {
 	return nil
 }
 
+// TransferStatus0 is the main status response from a transfer
+type TransferStatus0 byte
+
+const (
+	Idle          TransferStatus0 = 0x00 // Idle. No transfer has occured since last readout. No other status bits are valid.
+	Busy          TransferStatus0 = 0x01 // Transfer is currently ongoing.
+	Complete      TransferStatus0 = 0x02 // Transfer completed successfully.
+	CompleteError TransferStatus0 = 0x03 // Transfer completed with errors.
+)
+
 type TransferStatus1 byte
 
 const (
-	AddressAcked    TransferStatus1 = 0x00
-	AddressNacked   TransferStatus1 = 0x01
-	ReadInProgress  TransferStatus1 = 0x02
-	WriteInProgress TransferStatus1 = 0x03
+	// Useful temporary status conditions, but not actual errors. Belongs to Busy.
+	AddressAcked    TransferStatus1 = 0x00 // Address ACKed. OK.
+	AddressNacked   TransferStatus1 = 0x01 // Address NACKed.
+	ReadInProgress  TransferStatus1 = 0x02 // Data read in progress.
+	WriteInProgress TransferStatus1 = 0x03 // Data write in progress.
 
-	TimeoutAddressNacked TransferStatus1 = 0x00
-	TimeoutBusNotFree    TransferStatus1 = 0x01
-	ArbitrationLost      TransferStatus1 = 0x02
-	ReadIncomplete       TransferStatus1 = 0x03
-	WriteIncomplete      TransferStatus1 = 0x04
-	SuccededAfterRetries TransferStatus1 = 0x04
+	// Belongs to Complete and CompleteError. Some of them are actual error conditions.
+	TimeoutAddressNacked TransferStatus1 = 0x00 // Timeout address NACKed.
+	TimeoutBusNotFree    TransferStatus1 = 0x01 // Timeout bus not free (SCL Low Timeout).
+	ArbitrationLost      TransferStatus1 = 0x02 // Arbitration lost.
+	ReadIncomplete       TransferStatus1 = 0x03 // Read incomplete.
+	WriteIncomplete      TransferStatus1 = 0x04 // Write incomplete.
+	SuccededAfterRetries TransferStatus1 = 0x04 // Succeeded after NumRetries retries.
+
+	InvalidStatus1 TransferStatus1 = 0xff // Only used as return value when no other status is valid.
 )
 
 type TransferStatus struct {
-	Status0 TransferStatus0
-	Status1 TransferStatus1
-	Status2 uint16
-	Status3 uint16
+	status0          TransferStatus0
+	status1          TransferStatus1 // Specific conditions based on Status0.
+	numRetries       uint16          // Number of retries before completing, being canceled, or timing out
+	numBytesReceived uint16          // Number of received bytes.
 }
 
 // TransferStatusResponse receives the status response from the previously
@@ -858,10 +862,10 @@ func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 		return TransferStatus{}, errf(ErrUnexpectedReportID(buf[0]))
 	}
 	return TransferStatus{
-		Status0: TransferStatus0(buf[1]),
-		Status1: TransferStatus1(buf[2]),
-		Status2: binary.BigEndian.Uint16(buf[3:5]),
-		Status3: binary.BigEndian.Uint16(buf[5:7]),
+		status0:          TransferStatus0(buf[1]),
+		status1:          TransferStatus1(buf[2]),
+		numRetries:       binary.BigEndian.Uint16(buf[3:5]),
+		numBytesReceived: binary.BigEndian.Uint16(buf[5:7]),
 	}, nil
 }
 
