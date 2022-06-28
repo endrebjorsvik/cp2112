@@ -815,37 +815,97 @@ func (d *CP2112) TransferStatusRequest() error {
 type TransferStatus0 byte
 
 const (
-	Idle          TransferStatus0 = 0x00 // Idle. No transfer has occured since last readout. No other status bits are valid.
-	Busy          TransferStatus0 = 0x01 // Transfer is currently ongoing.
-	Complete      TransferStatus0 = 0x02 // Transfer completed successfully.
-	CompleteError TransferStatus0 = 0x03 // Transfer completed with errors.
+	Idle            TransferStatus0 = 0x00 // Idle. No transfer has occured since last readout. No other status bits are valid.
+	Busy            TransferStatus0 = 0x01 // Transfer is currently ongoing.
+	CompleteSuccess TransferStatus0 = 0x02 // Transfer completed successfully.
+	CompleteError   TransferStatus0 = 0x03 // Transfer completed with errors.
 )
 
-type TransferStatus1 byte
+func (s TransferStatus0) IsIdle() bool {
+	return s == Idle
+}
+
+func (s TransferStatus0) IsBusy() bool {
+	return s == Busy
+}
+
+func (s TransferStatus0) IsCompleteSuccess() bool {
+	return s == CompleteSuccess
+}
+
+func (s TransferStatus0) IsCompleteError() bool {
+	return s == CompleteError
+}
+
+type TransferBusyStatus byte
+type TransferCompleteStatus byte
+
+//go:generate stringer -type=TransferBusyStatus,TransferCompleteStatus -output=cp2112_string.go
 
 const (
 	// Useful temporary status conditions, but not actual errors. Belongs to Busy.
-	AddressAcked    TransferStatus1 = 0x00 // Address ACKed. OK.
-	AddressNacked   TransferStatus1 = 0x01 // Address NACKed.
-	ReadInProgress  TransferStatus1 = 0x02 // Data read in progress.
-	WriteInProgress TransferStatus1 = 0x03 // Data write in progress.
+	AddressAcked    TransferBusyStatus = 0x00 // Address ACKed. OK.
+	AddressNacked   TransferBusyStatus = 0x01 // Address NACKed.
+	ReadInProgress  TransferBusyStatus = 0x02 // Data read in progress.
+	WriteInProgress TransferBusyStatus = 0x03 // Data write in progress.
 
-	// Belongs to Complete and CompleteError. Some of them are actual error conditions.
-	TimeoutAddressNacked TransferStatus1 = 0x00 // Timeout address NACKed.
-	TimeoutBusNotFree    TransferStatus1 = 0x01 // Timeout bus not free (SCL Low Timeout).
-	ArbitrationLost      TransferStatus1 = 0x02 // Arbitration lost.
-	ReadIncomplete       TransferStatus1 = 0x03 // Read incomplete.
-	WriteIncomplete      TransferStatus1 = 0x04 // Write incomplete.
-	SuccededAfterRetries TransferStatus1 = 0x04 // Succeeded after NumRetries retries.
+	// Belongs to CompleteError. All are error conditions.
+	TimeoutAddressNacked TransferCompleteStatus = 0x00 // Timeout address NACKed.
+	TimeoutBusNotFree    TransferCompleteStatus = 0x01 // Timeout bus not free (SCL Low Timeout).
+	ArbitrationLost      TransferCompleteStatus = 0x02 // Arbitration lost.
+	ReadIncomplete       TransferCompleteStatus = 0x03 // Read incomplete.
+	WriteIncomplete      TransferCompleteStatus = 0x04 // Write incomplete.
 
-	InvalidStatus1 TransferStatus1 = 0xff // Only used as return value when no other status is valid.
+	// Belongs to CompleteSuccess.
+	SuccededAfterRetries TransferCompleteStatus = 0x05 // Succeeded after NumRetries retries.
+
+	InvalidBusyStatus     TransferBusyStatus     = 0xff // Only used as return value when no other status is valid.
+	InvalidCompleteStatus TransferCompleteStatus = 0xff // Only used as return value when no other status is valid.
 )
 
 type TransferStatus struct {
 	status0          TransferStatus0
-	status1          TransferStatus1 // Specific conditions based on Status0.
-	numRetries       uint16          // Number of retries before completing, being canceled, or timing out
-	numBytesReceived uint16          // Number of received bytes.
+	busyStatus       TransferBusyStatus // Specific busy condition based on Status0.
+	completeStatus   TransferCompleteStatus
+	numRetries       uint16 // Number of retries before completing, being canceled, or timing out
+	numBytesReceived uint16 // Number of received bytes.
+}
+
+func (s *TransferStatus) IsIdle() bool {
+	return s.status0.IsIdle()
+}
+
+func (s *TransferStatus) IsBusy() (bool, TransferBusyStatus) {
+	return s.status0.IsBusy(), s.busyStatus
+}
+
+func (s *TransferStatus) IsCompleteError() (bool, TransferCompleteStatus) {
+	if !s.status0.IsCompleteError() {
+		return false, InvalidCompleteStatus
+	}
+	return true, s.completeStatus
+}
+
+func (s *TransferStatus) IsCompleteSuccess() (bool, *TransferCompleteInfo, error) {
+	if !s.status0.IsCompleteSuccess() {
+		return false, nil, nil
+	}
+	if s.completeStatus != SuccededAfterRetries {
+		return false, nil, fmt.Errorf("unexpected success status: %d", s.completeStatus)
+	}
+	return true, &TransferCompleteInfo{
+		NumRetries:       s.numRetries,
+		NumBytesReceived: s.numBytesReceived,
+	}, nil
+}
+
+type TransferCompleteInfo struct {
+	NumRetries       uint16
+	NumBytesReceived uint16
+}
+
+func (s *TransferCompleteInfo) String() string {
+	return fmt.Sprintf("transfered %d bytes with %d retries", s.NumBytesReceived, s.NumRetries)
 }
 
 // TransferStatusResponse receives the status response from the previously
@@ -861,9 +921,19 @@ func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 	if buf[0] != reportIdTransferStatusResponse {
 		return TransferStatus{}, errf(ErrUnexpectedReportID(buf[0]))
 	}
+	status := TransferStatus0(buf[1])
+	busyStatus := InvalidBusyStatus
+	completeStatus := InvalidCompleteStatus
+	if status.IsBusy() {
+		busyStatus = TransferBusyStatus(buf[2])
+	}
+	if status.IsCompleteSuccess() || status.IsCompleteError() {
+		completeStatus = TransferCompleteStatus(buf[2])
+	}
 	return TransferStatus{
-		status0:          TransferStatus0(buf[1]),
-		status1:          TransferStatus1(buf[2]),
+		status0:          status,
+		busyStatus:       busyStatus,
+		completeStatus:   completeStatus,
 		numRetries:       binary.BigEndian.Uint16(buf[3:5]),
 		numBytesReceived: binary.BigEndian.Uint16(buf[5:7]),
 	}, nil
