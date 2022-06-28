@@ -21,7 +21,7 @@ jobs:
     - name: Additional setup
       run: |
         sudo apt-get update
-        sudo apt-get install -y libhidapi
+        sudo apt-get install -y libhidapi-dev
         go install golang.org/x/tools/cmd/stringer
 
     - name: Generate
