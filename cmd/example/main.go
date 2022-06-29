@@ -129,6 +129,16 @@ func usbDemo(dev *cp2112.CP2112) error {
 		return err
 	}
 	fmt.Printf("Manufacturer string: '%v'\n", manuf)
+	prod, err := dev.GetUSBProductString()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Product string: '%v'\n", prod)
+	ser, err := dev.GetUSBSerialString()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Serial string: '%v'\n", ser)
 	return nil
 }
 

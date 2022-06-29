@@ -3,6 +3,7 @@ package cp2112
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -1102,10 +1103,10 @@ func utf16LEToString(b []byte) (string, error) {
 	return string(d), nil
 }
 
-// GetUSBManufacturerString reads the current UsbConfiguration from the device.
+// GetUSBManufacturerString reads the USB Manufacturer string descriptor from the device.
 func (d *CP2112) GetUSBManufacturerString() (string, error) {
 	errf := errorWrapper("GetUSBManufacturerString")
-	buf := make([]byte, 64)
+	buf := make([]byte, 63)
 	buf[0] = reportIdManufacturerString
 	buf[1] = 60 // Maximum length
 	buf[2] = 0x03
@@ -1119,7 +1120,8 @@ func (d *CP2112) GetUSBManufacturerString() (string, error) {
 	if n != int(buf[1]) {
 		return "", errf(ErrUnexpectedReportLength(buf[1]))
 	}
-	s, err := utf16LEToString(buf[3 : 3+(n-2)])
+	s, err := utf16LEToString(buf[3:])
+	s = strings.TrimRight(s, "\x00")
 	if err != nil {
 		return "", errf(err)
 	}
@@ -1128,5 +1130,68 @@ func (d *CP2112) GetUSBManufacturerString() (string, error) {
 		"buffer":             buf,
 		"manufacturerString": s,
 	}).Debugf("Got USB manufacturer string of device.")
+	return s, nil
+}
+
+// GetUSBProductString reads the USB Product string descriptor from the device.
+func (d *CP2112) GetUSBProductString() (string, error) {
+	errf := errorWrapper("GetUSBProductString")
+	buf := make([]byte, 63)
+	buf[0] = reportIdProductString
+	buf[1] = 60 // Maximum length
+	buf[2] = 0x03
+	n, err := d.dev.GetFeatureReport(buf)
+	if err != nil {
+		return "", errf(err)
+	}
+	if buf[0] != reportIdProductString {
+		return "", errf(ErrUnexpectedReportID(buf[0]))
+	}
+	if n != int(buf[1]) {
+		return "", errf(ErrUnexpectedReportLength(buf[1]))
+	}
+	s, err := utf16LEToString(buf[3:])
+	s = strings.TrimRight(s, "\x00")
+	if err != nil {
+		return "", errf(err)
+	}
+	log.WithFields(log.Fields{
+		"method":        "GetUSBProductString",
+		"buffer":        buf,
+		"productString": s,
+	}).Debugf("Got USB product string of device.")
+	return s, nil
+}
+
+// GetUSBSerialString reads the USB Serial string descriptor from the device.
+func (d *CP2112) GetUSBSerialString() (string, error) {
+	errf := errorWrapper("GetUSBSerialString")
+	buf := make([]byte, 63)
+	buf[0] = reportIdSerialString
+	buf[1] = 60 // Maximum length
+	buf[2] = 0x03
+	n, err := d.dev.GetFeatureReport(buf)
+	if err != nil {
+		return "", errf(err)
+	}
+	log.WithFields(log.Fields{
+		"method": "GetUSBSerialString",
+		"buffer": buf,
+	}).Debugf("Got raw USB serial string buffer.")
+	if buf[0] != reportIdSerialString {
+		return "", errf(ErrUnexpectedReportID(buf[0]))
+	}
+	if n != (int(buf[1]) + 1) {
+		return "", errf(ErrUnexpectedReportLength(n))
+	}
+	s, err := utf16LEToString(buf[3:])
+	s = strings.TrimRight(s, "\x00")
+	if err != nil {
+		return "", errf(err)
+	}
+	log.WithFields(log.Fields{
+		"method":       "GetUSBSerialString",
+		"serialString": s,
+	}).Debugf("Got USB serial string of device.")
 	return s, nil
 }
