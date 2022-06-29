@@ -117,14 +117,14 @@ func InvertGpioValue(v GpioValue) GpioValue {
 // is configured in Latch Value. To drive a "1" on an output pin, the corresponding
 // bit should be set to GpioHigh. To drive a "0" on an output pin, the corresponding bit
 // should be set to GpioLow.
-// The Report sets new values only for output pins that have a "1" in the corresponding
+// The Report sets new values only for output pins that have a true in the corresponding
 // bit position in Latch Mask. If the corresponding bit in Latch Mask is set to
-// "0", a new pin value will not be set, even if the pin is configured as an output pin.
+// false, a new pin value will not be set, even if the pin is configured as an output pin.
 // This Report does not affect any pins that are not configured as outputs.
-func (d *CP2112) SetGpioValues(vals [8]GpioValue, mask [8]GpioValue) error {
+func (d *CP2112) SetGpioValues(vals [8]GpioValue, mask [8]bool) error {
 	errf := errorWrapper("SetGpioValues")
 	raw_val := gpioValuesToByte(vals)
-	raw_mask := gpioValuesToByte(mask)
+	raw_mask := boolsToByte(mask)
 	req := []byte{reportIdSetGpioValues, raw_val, raw_mask}
 	if n, err := d.dev.SendFeatureReport(req); err != nil {
 		return errf(err)
@@ -146,8 +146,8 @@ func (d *CP2112) SetGpioValue(idx uint, value GpioValue) error {
 	}
 	var vals [8]GpioValue
 	vals[idx] = value
-	var mask [8]GpioValue
-	mask[idx] = GpioHigh
+	var mask [8]bool
+	mask[idx] = true
 	return d.SetGpioValues(vals, mask)
 }
 

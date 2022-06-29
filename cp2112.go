@@ -223,3 +223,15 @@ func intsToByte(vals [8]int) byte {
 	}
 	return res
 }
+
+func boolsToByte(vals [8]bool) byte {
+	var res byte
+	for i, v := range vals {
+		n := 0
+		if v {
+			n = 1
+		}
+		res += byte(n << i)
+	}
+	return res
+}
