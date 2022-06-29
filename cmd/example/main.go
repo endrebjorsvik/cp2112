@@ -123,6 +123,12 @@ func usbDemo(dev *cp2112.CP2112) error {
 		return err
 	}
 	fmt.Printf("USB configuration: %+v\n", conf)
+
+	manuf, err := dev.GetUSBManufacturerString()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Manufacturer string: '%v'\n", manuf)
 	return nil
 }
 

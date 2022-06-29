@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	hid "github.com/sstallion/go-hid"
+	"golang.org/x/text/encoding/unicode"
 )
 
 // CP2112 is the primary type for interacting with the SiLabs CP2112
@@ -74,7 +75,7 @@ const (
 	reportIdCancelTransfer         byte = 0x17
 	reportIdLockByte               byte = 0x20
 	reportIdUSBConfiguration       byte = 0x21
-	reportIdManufacturingString    byte = 0x22
+	reportIdManufacturerString     byte = 0x22
 	reportIdProductString          byte = 0x23
 	reportIdSerialString           byte = 0x24
 
@@ -980,27 +981,27 @@ const (
 
 // LockBits containts the programmability state of all the programmable (non-volatile) fields of the device.
 type LockBits struct {
-	VID                 LockBit
-	PID                 LockBit
-	MaxPower            LockBit
-	PowerMode           LockBit
-	ReleaseVersion      LockBit
-	ManufacturingString LockBit
-	ProductString       LockBit
-	SerialString        LockBit
+	VID                LockBit
+	PID                LockBit
+	MaxPower           LockBit
+	PowerMode          LockBit
+	ReleaseVersion     LockBit
+	ManufacturerString LockBit
+	ProductString      LockBit
+	SerialString       LockBit
 }
 
 func newLockBits(b byte) LockBits {
 	vals := byteToInts(b)
 	return LockBits{
-		VID:                 LockBit(vals[0]),
-		PID:                 LockBit(vals[1]),
-		MaxPower:            LockBit(vals[2]),
-		PowerMode:           LockBit(vals[3]),
-		ReleaseVersion:      LockBit(vals[4]),
-		ManufacturingString: LockBit(vals[5]),
-		ProductString:       LockBit(vals[6]),
-		SerialString:        LockBit(vals[7]),
+		VID:                LockBit(vals[0]),
+		PID:                LockBit(vals[1]),
+		MaxPower:           LockBit(vals[2]),
+		PowerMode:          LockBit(vals[3]),
+		ReleaseVersion:     LockBit(vals[4]),
+		ManufacturerString: LockBit(vals[5]),
+		ProductString:      LockBit(vals[6]),
+		SerialString:       LockBit(vals[7]),
 	}
 }
 
@@ -1077,9 +1078,6 @@ func (d *CP2112) GetUSBConfiguration() (USBConfiguration, error) {
 	} else if n != len(buf) {
 		return USBConfiguration{}, errf(ErrRecvUnexpectedBytes(n))
 	}
-	if buf[0] != reportIdUSBConfiguration {
-		return USBConfiguration{}, errf(ErrUnexpectedReportID(buf[0]))
-	}
 	config, err := usbConfigurationFromReport(buf)
 	if err != nil {
 		return USBConfiguration{}, errf(err)
@@ -1089,4 +1087,46 @@ func (d *CP2112) GetUSBConfiguration() (USBConfiguration, error) {
 		"config": config,
 	}).Debugf("Got USB configuration of device.")
 	return config, nil
+}
+
+func utf16LEToString(b []byte) (string, error) {
+	// USB string descriptors must use UTF-16-LE encoding according to:
+	// "Unicode Engineering Change Notice to the USB 2.0 specification as of February 21, 2005"
+	// https://www.usb.org/document-library/usb-20-specification
+	enc := unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
+	decoder := enc.NewDecoder()
+	d, err := decoder.Bytes(b)
+	if err != nil {
+		return "", err
+	}
+	return string(d), nil
+}
+
+// GetUSBManufacturerString reads the current UsbConfiguration from the device.
+func (d *CP2112) GetUSBManufacturerString() (string, error) {
+	errf := errorWrapper("GetUSBManufacturerString")
+	buf := make([]byte, 64)
+	buf[0] = reportIdManufacturerString
+	buf[1] = 60 // Maximum length
+	buf[2] = 0x03
+	n, err := d.dev.GetFeatureReport(buf)
+	if err != nil {
+		return "", errf(err)
+	}
+	if buf[0] != reportIdManufacturerString {
+		return "", errf(ErrUnexpectedReportID(buf[0]))
+	}
+	if n != int(buf[1]) {
+		return "", errf(ErrUnexpectedReportLength(buf[1]))
+	}
+	s, err := utf16LEToString(buf[3 : 3+(n-2)])
+	if err != nil {
+		return "", errf(err)
+	}
+	log.WithFields(log.Fields{
+		"method":             "GetUSBManufacturerString",
+		"buffer":             buf,
+		"manufacturerString": s,
+	}).Debugf("Got USB manufacturer string of device.")
+	return s, nil
 }
