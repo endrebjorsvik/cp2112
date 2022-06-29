@@ -42,11 +42,17 @@ func gpioDemo(dev *cp2112.CP2112) error {
 		cp2112.GpioOutput,
 		cp2112.GpioOutput,
 	}
-	dev.SetGpioDirections(all_out)
+	if err := dev.SetGpioDirections(all_out); err != nil {
+		return err
+	}
 	for i := 0; i < 8; i++ {
 		off := uint((i - 1) % 8)
-		dev.SetGpioValue(off, cp2112.GpioHigh)
-		dev.SetGpioValue(uint(i), cp2112.GpioLow)
+		if err := dev.SetGpioValue(off, cp2112.GpioHigh); err != nil {
+			return err
+		}
+		if err := dev.SetGpioValue(uint(i), cp2112.GpioLow); err != nil {
+			return err
+		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	return nil
@@ -118,7 +124,7 @@ func main() {
 
 	idx := 0
 	fmt.Println("Listing all connected USB HID devices.")
-	hid.Enumerate(hid.VendorIDAny, hid.ProductIDAny,
+	err := hid.Enumerate(hid.VendorIDAny, hid.ProductIDAny,
 		func(info *hid.DeviceInfo) error {
 			fmt.Printf(" %v. %s: ID %04x:%04x %s %s, SN: %s, Rel: %v, %v %v, if: %v.\n",
 				idx,
@@ -135,6 +141,9 @@ func main() {
 			idx++
 			return nil
 		})
+	if err != nil {
+		log.Fatalf("Could not enumerate HID devices: %s", err)
+	}
 
 	cpids, err := cp2112.FindCP2112()
 	if err != nil {
