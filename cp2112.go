@@ -19,8 +19,8 @@ type CP2112 struct {
 // DevID is USB HID identification that is used to connect to the correct
 // HID device.
 type DevID struct {
-	Vid    uint16 // Device Vendor ID
-	Pid    uint16 // Device Product ID
+	VID    uint16 // Device Vendor ID
+	PID    uint16 // Device Product ID
 	Serial string // Device serial number
 }
 
@@ -31,7 +31,7 @@ func FindCP2112() ([]DevID, error) {
 	err := hid.Enumerate(0x10c4, 0xea90,
 		func(info *hid.DeviceInfo) error {
 			devs = append(devs, DevID{
-				Vid: info.VendorID, Pid: info.ProductID, Serial: info.SerialNbr,
+				VID: info.VendorID, PID: info.ProductID, Serial: info.SerialNbr,
 			})
 			return nil
 		})
@@ -45,8 +45,8 @@ func NewCP2112(vid, pid uint16, serial string) (*CP2112, error) {
 		return nil, fmt.Errorf("could not open HID device 0x%04x:0x%04x (SN: %s): %w", pid, vid, serial, err)
 	}
 	log.WithFields(log.Fields{
-		"vid":    vid,
-		"pid":    pid,
+		"VID":    vid,
+		"PID":    pid,
 		"serial": serial,
 	}).Debugf("Opened CP2112 device.")
 	return &CP2112{dev: dev}, nil
@@ -73,7 +73,7 @@ const (
 	reportIdTransferStatusResponse byte = 0x16
 	reportIdCancelTransfer         byte = 0x17
 	reportIdLockByte               byte = 0x20
-	reportIdUsbConfiguration       byte = 0x21
+	reportIdUSBConfiguration       byte = 0x21
 	reportIdManufacturingString    byte = 0x22
 	reportIdProductString          byte = 0x23
 	reportIdSerialString           byte = 0x24
@@ -840,7 +840,7 @@ func (s TransferStatus0) IsCompleteError() bool {
 type TransferBusyStatus byte
 type TransferCompleteStatus byte
 
-//go:generate stringer -type=TransferBusyStatus,TransferCompleteStatus,LockBit -output=cp2112_string.go
+//go:generate stringer -type=TransferBusyStatus,TransferCompleteStatus,LockBit,USBPowerMode -output=cp2112_string.go
 
 const (
 	// Useful temporary status conditions, but not actual errors. Belongs to Busy.
@@ -980,27 +980,27 @@ const (
 
 // LockBits containts the programmability state of all the programmable (non-volatile) fields of the device.
 type LockBits struct {
-	VID                LockBit
-	PID                LockBit
-	MaxPower           LockBit
-	PowerMode          LockBit
-	ReleaseVersion     LockBit
-	ManufacturerString LockBit
-	ProductString      LockBit
-	SerialString       LockBit
+	VID                 LockBit
+	PID                 LockBit
+	MaxPower            LockBit
+	PowerMode           LockBit
+	ReleaseVersion      LockBit
+	ManufacturingString LockBit
+	ProductString       LockBit
+	SerialString        LockBit
 }
 
 func newLockBits(b byte) LockBits {
 	vals := byteToInts(b)
 	return LockBits{
-		VID:                LockBit(vals[0]),
-		PID:                LockBit(vals[1]),
-		MaxPower:           LockBit(vals[2]),
-		PowerMode:          LockBit(vals[3]),
-		ReleaseVersion:     LockBit(vals[4]),
-		ManufacturerString: LockBit(vals[5]),
-		ProductString:      LockBit(vals[6]),
-		SerialString:       LockBit(vals[7]),
+		VID:                 LockBit(vals[0]),
+		PID:                 LockBit(vals[1]),
+		MaxPower:            LockBit(vals[2]),
+		PowerMode:           LockBit(vals[3]),
+		ReleaseVersion:      LockBit(vals[4]),
+		ManufacturingString: LockBit(vals[5]),
+		ProductString:       LockBit(vals[6]),
+		SerialString:        LockBit(vals[7]),
 	}
 }
 
@@ -1020,4 +1020,73 @@ func (d *CP2112) GetLockBits() (LockBits, error) {
 		"bits":   bits,
 	}).Debugf("Got lock bits of device.")
 	return bits, nil
+}
+
+type USBConfiguration struct {
+	VID            uint16         // VID is the USB Vendor ID.
+	PID            uint16         // PID is the USB Product ID.
+	MaxPower       int            // Maximum current requested by the device from the USB host in bus-powered mode.
+	PowerMode      USBPowerMode   // Indicates whether the device is operating in Bus-powered or Self-powered mode.
+	ReleaseVersion ReleaseVersion // ReleaseVersion is a user-programmable value.
+	Mask           LockBits       // Programmability state of each programmable field.
+}
+
+// USBPowerMode indicates whether the USB device is operating in Bus-powered or Self-powered mode.
+type USBPowerMode uint8
+
+const (
+	BusPowered              USBPowerMode = 0
+	SelfPoweredRegulatorOff USBPowerMode = 1
+	SelfPoweredRegulatorOn  USBPowerMode = 2
+)
+
+// ReleaseVersion is a user-programmable value in the device.
+type ReleaseVersion struct {
+	Major uint8
+	Minor uint8
+}
+
+func usbConfigurationFromReport(buf []byte) (USBConfiguration, error) {
+	errf := errorWrapper("usbConfigurationFromReport")
+	if len(buf) != 10 {
+		return USBConfiguration{}, errf(ErrUnexpectedReportLength(len(buf)))
+	}
+	if buf[0] != reportIdUSBConfiguration {
+		return USBConfiguration{}, errf(ErrUnexpectedReportID(buf[0]))
+	}
+	return USBConfiguration{
+		VID:       binary.LittleEndian.Uint16(buf[1:3]),
+		PID:       binary.LittleEndian.Uint16(buf[3:5]),
+		MaxPower:  2 * int(buf[5]),
+		PowerMode: USBPowerMode(buf[6]),
+		ReleaseVersion: ReleaseVersion{
+			Major: buf[7],
+			Minor: buf[8],
+		},
+		Mask: newLockBits(buf[9]),
+	}, nil
+}
+
+// GetUSBConfiguration reads the current UsbConfiguration from the device.
+func (d *CP2112) GetUSBConfiguration() (USBConfiguration, error) {
+	errf := errorWrapper("GetUSBConfiguration")
+	buf := make([]byte, 10)
+	buf[0] = reportIdUSBConfiguration
+	if n, err := d.dev.GetFeatureReport(buf); err != nil {
+		return USBConfiguration{}, errf(err)
+	} else if n != len(buf) {
+		return USBConfiguration{}, errf(ErrRecvUnexpectedBytes(n))
+	}
+	if buf[0] != reportIdUSBConfiguration {
+		return USBConfiguration{}, errf(ErrUnexpectedReportID(buf[0]))
+	}
+	config, err := usbConfigurationFromReport(buf)
+	if err != nil {
+		return USBConfiguration{}, errf(err)
+	}
+	log.WithFields(log.Fields{
+		"method": "GetUSBConfiguration",
+		"config": config,
+	}).Debugf("Got USB configuration of device.")
+	return config, nil
 }

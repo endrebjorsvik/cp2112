@@ -117,6 +117,12 @@ func usbDemo(dev *cp2112.CP2112) error {
 		return err
 	}
 	fmt.Printf("Lock bits: %+v\n", lockBits)
+
+	conf, err := dev.GetUSBConfiguration()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("USB configuration: %+v\n", conf)
 	return nil
 }
 
@@ -167,7 +173,7 @@ func main() {
 	}
 	cpid := cpids[*deviceIdx]
 
-	dev, err := cp2112.NewCP2112(cpid.Vid, cpid.Pid, cpid.Serial)
+	dev, err := cp2112.NewCP2112(cpid.VID, cpid.PID, cpid.Serial)
 	if err != nil {
 		log.Fatalf("Error opening CP2112: %s", err)
 	}
