@@ -46,14 +46,19 @@ func gpioDemo(dev *cp2112.CP2112) error {
 		return err
 	}
 	for i := 0; i < 8; i++ {
-		off := uint((i - 1) % 8)
-		if err := dev.SetGpioValue(off, cp2112.GpioHigh); err != nil {
-			return err
+		if i > 0 {
+			off := uint((i - 1) % 8)
+			if err := dev.SetGpioValue(off, cp2112.GpioHigh); err != nil {
+				return err
+			}
 		}
 		if err := dev.SetGpioValue(uint(i), cp2112.GpioLow); err != nil {
 			return err
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+	if err := dev.SetGpioValue(7, cp2112.GpioHigh); err != nil {
+		return err
 	}
 	return nil
 }
