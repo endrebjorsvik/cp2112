@@ -343,6 +343,7 @@ const (
 
 var clockMin = clockMax / (2 * 255)
 
+// CalculateClockFrequency calculates the resulting GPIO7 clock frequency for a given divider.
 func CalculateClockFrequency(divider byte) uint {
 	if divider == 0 {
 		return clockMax
@@ -350,8 +351,10 @@ func CalculateClockFrequency(divider byte) uint {
 	return clockMax / (2 * uint(divider))
 }
 
+// CalculateClockDivider calculates an approximate GPIO7 clock divider setting for a given target
+// clock frequency. It also returns the effective clock frequency of that setting.
 func CalculateClockDivider(freqHz uint) (byte, uint, error) {
-	if freqHz > clockMax || clockMin < 94_117 {
+	if freqHz > clockMax || freqHz < clockMin {
 		return 0, 0, ErrInvalidGpio7ClockSpeed(freqHz)
 	}
 	var d byte
