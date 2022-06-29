@@ -89,3 +89,41 @@ func TestAllGpioValues(t *testing.T) {
 		}
 	}
 }
+
+func TestCalculateClockFrequency(t *testing.T) {
+	vals := map[byte]uint{
+		0:   48_000_000,
+		1:   24_000_000,
+		2:   12_000_000,
+		3:   8_000_000,
+		4:   6_000_000,
+		255: 94_117,
+	}
+	for k, v := range vals {
+		d := uint8(k)
+		r := CalculateClockFrequency(d)
+		if r != v {
+			t.Errorf("CalculateClockFrequency(%v) = %v.", d, r)
+		}
+	}
+}
+
+func TestCalculateClockDividerOk(t *testing.T) {
+	vals := map[byte]uint{
+		0:   48_000_000,
+		1:   24_000_000,
+		2:   12_000_000,
+		3:   8_000_000,
+		4:   6_000_000,
+		255: 94_117,
+	}
+	for k, v := range vals {
+		r1, r2, err := CalculateClockDivider(v)
+		if err != nil {
+			t.Error(err)
+		}
+		if r1 != k || r2 != v {
+			t.Errorf("CalculateClockDivider(%v) = %v, %v.", v, r1, r2)
+		}
+	}
+}

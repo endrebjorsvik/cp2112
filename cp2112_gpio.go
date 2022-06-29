@@ -1,6 +1,10 @@
 package cp2112
 
-import log "github.com/sirupsen/logrus"
+import (
+	"fmt"
+
+	log "github.com/sirupsen/logrus"
+)
 
 // GpioValue describes the high or low state of a single GPIO pin
 // on the CP2112.
@@ -322,6 +326,68 @@ func (d *CP2112) EnableRxTxIndicator(enableTx, enableRx bool) error {
 	}
 	err = d.SetGpioConfiguration(c)
 	if err != nil {
+		return errf(err)
+	}
+	return nil
+}
+
+type ErrInvalidGpio7ClockSpeed int
+
+func (e ErrInvalidGpio7ClockSpeed) Error() string {
+	return fmt.Sprintf("invalid clock frequency: %d", e)
+}
+
+const (
+	clockMax uint = 48_000_000
+)
+
+var clockMin = clockMax / (2 * 255)
+
+func CalculateClockFrequency(divider byte) uint {
+	if divider == 0 {
+		return clockMax
+	}
+	return clockMax / (2 * uint(divider))
+}
+
+func CalculateClockDivider(freqHz uint) (byte, uint, error) {
+	if freqHz > clockMax || clockMin < 94_117 {
+		return 0, 0, ErrInvalidGpio7ClockSpeed(freqHz)
+	}
+	var d byte
+	if freqHz == 48_000_000 {
+		d = 0
+	} else {
+		d = byte(24_000_000 / freqHz)
+	}
+	return d, CalculateClockFrequency(d), nil
+}
+
+// EnableGpio7Clock enables the GPIO7 clock output
+func (d *CP2112) EnableGpio7Clock(clockDivider byte) error {
+	errf := errorWrapper("EnableGpio7Clock")
+	c, err := d.GetGpioConfiguration()
+	if err != nil {
+		return errf(err)
+	}
+	c.Direction[7] = GpioOutput
+	c.Gpio7ClockEnabled = true
+	c.ClockDivider = clockDivider
+	if err := d.SetGpioConfiguration(c); err != nil {
+		return errf(err)
+	}
+	return nil
+}
+
+// DisableGpio7Clock enables the GPIO7 clock output
+func (d *CP2112) DisableGpio7Clock() error {
+	errf := errorWrapper("DisableGpio7Clock")
+	c, err := d.GetGpioConfiguration()
+	if err != nil {
+		return errf(err)
+	}
+	c.Gpio7ClockEnabled = false
+	if err := d.SetGpioConfiguration(c); err != nil {
 		return errf(err)
 	}
 	return nil
