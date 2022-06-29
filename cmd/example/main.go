@@ -111,10 +111,20 @@ func smbusDemo(dev *cp2112.CP2112) error {
 	return nil
 }
 
+func usbDemo(dev *cp2112.CP2112) error {
+	lockBits, err := dev.GetLockBits()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Lock bits: %+v\n", lockBits)
+	return nil
+}
+
 func main() {
 	verbose := flag.Bool("verbose", false, "Increase logging.")
 	runGpio := flag.Bool("gpio", false, "Run GPIO demo.")
 	runSmbus := flag.Bool("smbus", false, "Run SMBus demo.")
+	runUsb := flag.Bool("usb", false, "Run USB demo.")
 	deviceIdx := flag.Int("dev", 0, "Device index of compatible CP2112.")
 	flag.Parse()
 
@@ -178,6 +188,12 @@ func main() {
 	if *runSmbus {
 		if err := smbusDemo(dev); err != nil {
 			log.Fatalf("smbusDemo error: %s", err)
+		}
+	}
+
+	if *runUsb {
+		if err := usbDemo(dev); err != nil {
+			log.Fatalf("usbDemo error: %s", err)
 		}
 	}
 }

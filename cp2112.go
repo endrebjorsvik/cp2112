@@ -840,7 +840,7 @@ func (s TransferStatus0) IsCompleteError() bool {
 type TransferBusyStatus byte
 type TransferCompleteStatus byte
 
-//go:generate stringer -type=TransferBusyStatus,TransferCompleteStatus -output=cp2112_string.go
+//go:generate stringer -type=TransferBusyStatus,TransferCompleteStatus,LockBit -output=cp2112_string.go
 
 const (
 	// Useful temporary status conditions, but not actual errors. Belongs to Busy.
@@ -968,4 +968,56 @@ func (d *CP2112) TransferCancel() error {
 		return errf(ErrSentUnexpectedBytes(n))
 	}
 	return nil
+}
+
+// LockBit describes the programmability state of a programmable (non-volatile) field.
+type LockBit uint8
+
+const (
+	Programmed   LockBit = 0
+	Unprogrammed LockBit = 1
+)
+
+// LockBits containts the programmability state of all the programmable (non-volatile) fields of the device.
+type LockBits struct {
+	VID                LockBit
+	PID                LockBit
+	MaxPower           LockBit
+	PowerMode          LockBit
+	ReleaseVersion     LockBit
+	ManufacturerString LockBit
+	ProductString      LockBit
+	SerialString       LockBit
+}
+
+func newLockBits(b byte) LockBits {
+	vals := byteToInts(b)
+	return LockBits{
+		VID:                LockBit(vals[0]),
+		PID:                LockBit(vals[1]),
+		MaxPower:           LockBit(vals[2]),
+		PowerMode:          LockBit(vals[3]),
+		ReleaseVersion:     LockBit(vals[4]),
+		ManufacturerString: LockBit(vals[5]),
+		ProductString:      LockBit(vals[6]),
+		SerialString:       LockBit(vals[7]),
+	}
+}
+
+// GetLockBits reads the current lock byte for the non-volatile
+// programmable fields of the CP2112.
+func (d *CP2112) GetLockBits() (LockBits, error) {
+	errf := errorWrapper("GetLockBits")
+	buf := []byte{reportIdLockByte, 0xff}
+	if n, err := d.dev.GetFeatureReport(buf); err != nil {
+		return LockBits{}, errf(err)
+	} else if n != len(buf) {
+		return LockBits{}, errf(ErrRecvUnexpectedBytes(n))
+	}
+	bits := newLockBits(buf[0])
+	log.WithFields(log.Fields{
+		"method": "GetLockBits",
+		"bits":   bits,
+	}).Debugf("Got lock bits of device.")
+	return bits, nil
 }
