@@ -105,6 +105,8 @@ func usbConfigurationFromReport(buf []byte) (USBConfiguration, error) {
 	}, nil
 }
 
+// TODO: Missing SET methods for all these USB methods.
+
 // GetUSBConfiguration reads the current UsbConfiguration from the device.
 func (d *CP2112) GetUSBConfiguration() (USBConfiguration, error) {
 	errf := errorWrapper("GetUSBConfiguration")

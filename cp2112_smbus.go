@@ -113,7 +113,7 @@ func (d *CP2112) SetSmbusClockSpeedHz(clockSpeedHz uint32) error {
 }
 
 func checkDeviceAddress(addr byte) error {
-	if (addr & 1) == 1 {
+	if addr > 127 {
 		return ErrInvalidDeviceAddress(addr)
 	}
 	return nil
@@ -132,7 +132,7 @@ func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
 	}
 	buf := make([]byte, 4)
 	buf[0] = reportIdDataReadRequest
-	buf[1] = deviceAddr
+	buf[1] = deviceAddr << 1
 	binary.BigEndian.PutUint16(buf[2:4], length)
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
@@ -168,7 +168,7 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	}
 	buf := make([]byte, 5+targetAddrLen)
 	buf[0] = reportIdDataWriteReadRequest
-	buf[1] = deviceAddr
+	buf[1] = deviceAddr << 1
 	binary.BigEndian.PutUint16(buf[2:4], length)
 	buf[4] = byte(targetAddrLen)
 	copy(buf[5:], targetAddr)
@@ -230,10 +230,9 @@ func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 }
 
 // TransferDataWrite initiates a write operation. deviceAddr is the 7-bit address
-// of the device to which data is being sent. The address must be between 0xFE and
-// 0x02 (the least significant bit is the read/write bit and must be 0). data is
-// the actual data being sent over the SMBus to the device. The host can transmit
-// 1 to 61 bytes to the CP2112.
+// of the device to which data is being sent and must be <= 127. Read/write bit will
+// be padded behind the device address. data is the actual data being sent over the
+// SMBus to the device. The host can transmit 1 to 61 bytes to the CP2112.
 func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 	errf := errorWrapper("TransferDataWrite")
 	if err := checkDeviceAddress(deviceAddr); err != nil {
@@ -245,7 +244,7 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 	}
 	buf := make([]byte, 3+dataLen)
 	buf[0] = reportIdDataWrite
-	buf[1] = deviceAddr
+	buf[1] = deviceAddr << 1
 	buf[2] = byte(dataLen)
 	copy(buf[3:], data)
 	if n, err := d.dev.Write(buf); err != nil {
@@ -297,7 +296,7 @@ func (s TransferStatus0) IsCompleteError() bool {
 type TransferBusyStatus byte
 type TransferCompleteStatus byte
 
-//go:generate stringer -type=TransferBusyStatus,TransferCompleteStatus,LockBit,USBPowerMode -output=cp2112_string.go
+//go:generate stringer -type=TransferBusyStatus,TransferStatus0,TransferCompleteStatus,LockBit,USBPowerMode -output=cp2112_string.go
 
 const (
 	// Useful temporary status conditions, but not actual errors. Belongs to Busy.
@@ -427,3 +426,5 @@ func (d *CP2112) TransferCancel() error {
 	}
 	return nil
 }
+
+// TODO: Implement high-level functions for reading and writing bytes to register.

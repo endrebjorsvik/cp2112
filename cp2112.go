@@ -123,7 +123,7 @@ func (e ErrInvalidSmbusClockSpeed) Error() string {
 type ErrInvalidDeviceAddress byte
 
 func (e ErrInvalidDeviceAddress) Error() string {
-	return fmt.Sprintf("invalid device address: 0x%02x. LSB must be zero", int(e))
+	return fmt.Sprintf("invalid device address: 0x%02x. Must be <= 127", int(e))
 }
 
 // ErrInvalidTransferReadRequestLength indicates that an invalid read request data length was specified.
