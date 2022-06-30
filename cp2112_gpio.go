@@ -322,10 +322,9 @@ func (d *CP2112) EnableRxTxIndicator(enableTx, enableRx bool) error {
 	c.Gpio1RxEnabled = enableRx
 	if enableRx {
 		c.Direction[1] = GpioOutput
-		c.Drive[0] = GpioOpenDrain
+		c.Drive[1] = GpioOpenDrain
 	}
-	err = d.SetGpioConfiguration(c)
-	if err != nil {
+	if err := d.SetGpioConfiguration(c); err != nil {
 		return errf(err)
 	}
 	return nil
