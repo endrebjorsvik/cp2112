@@ -68,30 +68,14 @@ func smbusDemo(dev *cp2112.CP2112) error {
 	if err := dev.EnableRxTxIndicator(true, true); err != nil {
 		return fmt.Errorf("could not enable Tx/Rx indicators: %w", err)
 	}
-
+	if err := dev.SetSmbusClockSpeedHz(400_000); err != nil {
+		return fmt.Errorf("Could not set SMBus clock speed: %w.", err)
+	}
 	config, err := dev.GetSmbusConfiguration()
 	if err != nil {
 		return fmt.Errorf("Could not get SMBus config: %w.", err)
 	}
 	fmt.Println("SMBus Config:", config)
-	if config.ClockSpeedHz == 100_000 {
-		config.ClockSpeedHz = 400_000
-	} else {
-		config.ClockSpeedHz = 100_000
-	}
-	err = dev.SetSmbusConfiguration(config)
-	if err != nil {
-		return fmt.Errorf("Could not set SMBus config: %w.", err)
-	}
-	config, err = dev.GetSmbusConfiguration()
-	if err != nil {
-		return fmt.Errorf("Could not get SMBus config: %w.", err)
-	}
-	fmt.Println("SMBus Config:", config)
-	err = dev.SetSmbusClockSpeedHz(400_000)
-	if err != nil {
-		return fmt.Errorf("Could not set SMBus clock speed: %w.", err)
-	}
 
 	if err := dev.TransferDataWriteReadRequest(0x4B, 2, []byte{0}); err != nil {
 		return fmt.Errorf("Could not send WriteRead request: %w.", err)
@@ -114,6 +98,11 @@ func smbusDemo(dev *cp2112.CP2112) error {
 		return fmt.Errorf("Could not receive TransferDataReadResponse: %w.", err)
 	}
 	fmt.Printf("SMBus status: %v, length: %v, data: %v\n", st, len(data), data)
+
+	err = dev.TransferDataWrite(0x4B, []byte{0})
+	if err != nil {
+		return fmt.Errorf("Could not write SMBus data: %w.", err)
+	}
 	return nil
 }
 
