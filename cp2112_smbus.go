@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -23,6 +25,10 @@ type SmbusConfiguration struct {
 }
 
 func (c SmbusConfiguration) toReport() ([]byte, error) {
+	log.WithFields(log.Fields{
+		"method": "SmbusConfiguration.toReport",
+		"config": c,
+	}).Debugf("Creating SMBus configuration buffer.")
 	if (c.ClockSpeedHz < smbusClockSpeedHzMin) || (c.ClockSpeedHz > smbusClockSpeedHzMax) {
 		return nil, ErrInvalidSmbusClockSpeed(c.ClockSpeedHz)
 	}
@@ -54,7 +60,7 @@ func smbusConfigurationFromReport(buf []byte) (SmbusConfiguration, error) {
 	if buf[0] != reportIdSmbusConfiguration {
 		return SmbusConfiguration{}, errf(ErrUnexpectedReportID(buf[0]))
 	}
-	return SmbusConfiguration{
+	conf := SmbusConfiguration{
 		ClockSpeedHz:  binary.BigEndian.Uint32(buf[1:5]),
 		DeviceAddress: buf[5],
 		AutoSendRead:  buf[6] == 1,
@@ -62,7 +68,12 @@ func smbusConfigurationFromReport(buf []byte) (SmbusConfiguration, error) {
 		ReadTimeout:   time.Duration(binary.BigEndian.Uint16(buf[9:11])) * time.Millisecond,
 		SclLowTimeout: buf[11] == 1,
 		RetryTimes:    binary.BigEndian.Uint16(buf[12:14]),
-	}, nil
+	}
+	log.WithFields(log.Fields{
+		"method": "smbusConfigurationFromReport",
+		"config": conf,
+	}).Debugf("Parsed SMBus configuration.")
+	return conf, nil
 }
 
 // GetSmbusConfiguration reads the SMBus/I2C configuration from CP2112.
@@ -75,6 +86,9 @@ func (d *CP2112) GetSmbusConfiguration() (SmbusConfiguration, error) {
 	} else if n != len(buf) {
 		return SmbusConfiguration{}, errf(ErrRecvUnexpectedBytes(n))
 	}
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("GetSmbusConfiguration received raw SMBus configuration buffer.")
 	return smbusConfigurationFromReport(buf)
 }
 
@@ -82,6 +96,9 @@ func (d *CP2112) GetSmbusConfiguration() (SmbusConfiguration, error) {
 func (d *CP2112) SetSmbusConfiguration(c SmbusConfiguration) error {
 	errf := errorWrapper("SetSmbusConfiguration")
 	buf, err := c.toReport()
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("SetSmbusConfiguration sending raw SMBus configuration buffer.")
 	if err != nil {
 		return errf(err)
 	}
@@ -123,6 +140,11 @@ func checkDeviceAddress(addr byte) error {
 // device from which data is being read. length is the number of bytes being requested from
 // the device.
 func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
+	log.WithFields(log.Fields{
+		"method":     "TransferDataReadRequest",
+		"deviceAddr": deviceAddr,
+		"length":     length,
+	}).Debugf("Sending Data Read Request.")
 	errf := errorWrapper("TransferDataReadRequest")
 	if err := checkDeviceAddress(deviceAddr); err != nil {
 		return errf(err)
@@ -134,6 +156,9 @@ func (d *CP2112) TransferDataReadRequest(deviceAddr byte, length uint16) error {
 	buf[0] = reportIdDataReadRequest
 	buf[1] = deviceAddr << 1
 	binary.BigEndian.PutUint16(buf[2:4], length)
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("TransferDataReadRequest sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
 	} else if n != 4 {
@@ -155,6 +180,12 @@ func checkReadLength(length uint16) error {
 // location being read on the device. The number of bytes in the targetAddr can be maximum
 // 16 bytes.
 func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, targetAddr []byte) error {
+	log.WithFields(log.Fields{
+		"method":     "TransferDataWriteReadRequest",
+		"deviceAddr": deviceAddr,
+		"length":     length,
+		"targetAddr": targetAddr,
+	}).Debugf("Sending Data Write Read Request.")
 	errf := errorWrapper("TransferDataWriteReadRequest")
 	if err := checkDeviceAddress(deviceAddr); err != nil {
 		return errf(err)
@@ -172,6 +203,9 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	binary.BigEndian.PutUint16(buf[2:4], length)
 	buf[4] = byte(targetAddrLen)
 	copy(buf[5:], targetAddr)
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("TransferDataWriteReadRequest sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
 	} else if n != len(buf) {
@@ -192,6 +226,10 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 // if no data is in the buffer, this command performs no action. This command can be
 // used while a read is in progress to retrieve the data received so far.
 func (d *CP2112) TransferDataReadForceSend(length uint16) error {
+	log.WithFields(log.Fields{
+		"method": "TransferDataReadForceSend",
+		"length": length,
+	}).Debugf("Sending Data Read Force Send Request.")
 	errf := errorWrapper("TransferDataReadForceSend")
 	if err := checkReadLength(length); err != nil {
 		return errf(err)
@@ -199,6 +237,9 @@ func (d *CP2112) TransferDataReadForceSend(length uint16) error {
 	buf := make([]byte, 3)
 	buf[0] = reportIdDataReadForceSend
 	binary.BigEndian.PutUint16(buf[1:3], length)
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("TransferDataReadForceSend sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
 	} else if n != len(buf) {
@@ -217,6 +258,9 @@ func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 	} else if n != len(buf) {
 		return 0, nil, errf(ErrRecvUnexpectedBytes(n))
 	}
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("TransferDataReadResponse received raw buffer.")
 	if buf[0] != reportIdDataReadResponse {
 		return 0, nil, errf(ErrUnexpectedReportID(buf[0]))
 	}
@@ -226,6 +270,12 @@ func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 		return 0, nil, fmt.Errorf("TransferDataReadResponse: report contains invalid data length: %v", length)
 	}
 	data := buf[3 : 3+length]
+	log.WithFields(log.Fields{
+		"method": "TransferDataReadResponse",
+		"status": status,
+		"length": length,
+		"data":   data,
+	}).Debugf("Received Data Read Response.")
 	return status, data, nil
 }
 
@@ -234,6 +284,11 @@ func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
 // be padded behind the device address. data is the actual data being sent over the
 // SMBus to the device. The host can transmit 1 to 61 bytes to the CP2112.
 func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
+	log.WithFields(log.Fields{
+		"method":     "TransferDataWrite",
+		"deviceAddr": deviceAddr,
+		"data":       data,
+	}).Debugf("Sending Data Write Request.")
 	errf := errorWrapper("TransferDataWrite")
 	if err := checkDeviceAddress(deviceAddr); err != nil {
 		return errf(err)
@@ -247,6 +302,9 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 	buf[1] = deviceAddr << 1
 	buf[2] = byte(dataLen)
 	copy(buf[3:], data)
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("TransferDataWrite sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
 	} else if n != len(buf) {
@@ -257,8 +315,14 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 
 // TransferStatusRequest requests a transfer status.
 func (d *CP2112) TransferStatusRequest() error {
-	errf := errorWrapper("TransferDataReadRequest")
+	log.WithFields(log.Fields{
+		"method": "TransferStatusRequest",
+	}).Debugf("Sending Status Request.")
+	errf := errorWrapper("TransferStatusRequest")
 	buf := []byte{reportIdTransferStatusRequest, 0x01}
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("TransferStatusRequest sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
 	} else if n != len(buf) {
@@ -394,6 +458,9 @@ func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 	} else if n != len(buf) {
 		return TransferStatus{}, errf(ErrSentUnexpectedBytes(n))
 	}
+	log.WithFields(log.Fields{
+		"buffer": buf,
+	}).Tracef("TransferStatusResponse received raw status buffer.")
 	if buf[0] != reportIdTransferStatusResponse {
 		return TransferStatus{}, errf(ErrUnexpectedReportID(buf[0]))
 	}
@@ -406,17 +473,28 @@ func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
 	if status.IsCompleteSuccess() || status.IsCompleteError() {
 		completeStatus = TransferCompleteStatus(buf[2])
 	}
-	return TransferStatus{
+	st := TransferStatus{
 		status0:          status,
 		busyStatus:       busyStatus,
 		completeStatus:   completeStatus,
 		numRetries:       binary.BigEndian.Uint16(buf[3:5]),
 		numBytesReceived: binary.BigEndian.Uint16(buf[5:7]),
-	}, nil
+	}
+	log.WithFields(log.Fields{
+		"method":         "TransferStatusResponse",
+		"status0":        status,
+		"busyStatus":     busyStatus,
+		"completeStatus": completeStatus,
+		"status":         st,
+	}).Debugf("Received Data Read Response.")
+	return st, nil
 }
 
 // TransferCancel cancels the ongoing transfer
 func (d *CP2112) TransferCancel() error {
+	log.WithFields(log.Fields{
+		"method": "TransferCancel",
+	}).Debugf("Sending Cancel Request.")
 	errf := errorWrapper("TransferCancel")
 	buf := []byte{reportIdCancelTransfer, 0x01}
 	if n, err := d.dev.Write(buf); err != nil {
