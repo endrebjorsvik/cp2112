@@ -109,21 +109,52 @@ func TestCalculateClockFrequency(t *testing.T) {
 }
 
 func TestCalculateClockDividerOk(t *testing.T) {
-	vals := map[byte]uint{
-		0:   48_000_000,
-		1:   24_000_000,
-		2:   12_000_000,
-		3:   8_000_000,
-		4:   6_000_000,
-		255: 94_117,
+	type stim struct {
+		Freq uint
+		Exp  byte
 	}
-	for k, v := range vals {
-		r1, r2, err := CalculateClockDivider(v)
+	vals := []stim{
+		{48_000_000, 0},
+		{47_999_999, 1},
+
+		{24_000_001, 1},
+		{24_000_000, 1},
+		{23_999_999, 2},
+
+		{12_000_001, 2},
+		{12_000_000, 2},
+		{11_999_999, 3},
+
+		{8_000_001, 3},
+		{8_000_000, 3},
+		{7_999_999, 4},
+
+		{6_000_000, 4},
+		{94_119, 255},
+		{94_118, 255},
+		{94_117, 255},
+	}
+	for i, s := range vals {
+		r1, r2, err := CalculateClockDivider(s.Freq)
 		if err != nil {
 			t.Error(err)
 		}
-		if r1 != k || r2 != v {
-			t.Errorf("CalculateClockDivider(%v) = %v, %v.", v, r1, r2)
+		if r1 != s.Exp || r2 > s.Freq {
+			t.Errorf("%v: CalculateClockDivider(%v) = %v, %v.", i, s.Freq, r1, r2)
+		}
+	}
+}
+
+func TestCalculateClockDividerClockFreq(t *testing.T) {
+	for i := 0; i < 256; i++ {
+		d := byte(i)
+		f := CalculateClockFrequency(d)
+		rd, rf, err := CalculateClockDivider(f)
+		if err != nil {
+			t.Error(err)
+		}
+		if rd != d || f != rf {
+			t.Errorf("%v: CalculateClockDivider(CalculateClockFrequency(%v)) = %v, %v. Should have %v", i, d, rd, rf, f)
 		}
 	}
 }

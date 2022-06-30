@@ -338,30 +338,32 @@ func (e ErrInvalidGpio7ClockSpeed) Error() string {
 }
 
 const (
-	clockMax uint = 48_000_000
+	gpioClockMax uint = 48_000_000
 )
 
-var clockMin = clockMax / (2 * 255)
+var gpioClockMin = gpioClockMax / (2 * 255)
 
-// CalculateClockFrequency calculates the resulting GPIO7 clock frequency for a given divider.
+// CalculateClockFrequency calculates the resulting GPIO7 clock frequency (in Hz) for a given divider.
 func CalculateClockFrequency(divider byte) uint {
 	if divider == 0 {
-		return clockMax
+		return gpioClockMax
 	}
-	return clockMax / (2 * uint(divider))
+	return gpioClockMax / (2 * uint(divider))
 }
 
 // CalculateClockDivider calculates an approximate GPIO7 clock divider setting for a given target
-// clock frequency. It also returns the effective clock frequency of that setting.
+// clock frequency. The returned frequency setting will always be smaller than or equal to the target
+// frequency. So 24 MHz will results in 24 MHz, while 23 MHz will result in 12 MHz. It also returns
+// the effective clock frequency (in Hz) of that setting.
 func CalculateClockDivider(freqHz uint) (byte, uint, error) {
-	if freqHz > clockMax || freqHz < clockMin {
+	if freqHz > gpioClockMax || freqHz < gpioClockMin {
 		return 0, 0, ErrInvalidGpio7ClockSpeed(freqHz)
 	}
 	var d byte
 	if freqHz == 48_000_000 {
 		d = 0
 	} else {
-		d = byte(24_000_000 / freqHz)
+		d = byte(24_000_000/(freqHz+1) + 1)
 	}
 	return d, CalculateClockFrequency(d), nil
 }
