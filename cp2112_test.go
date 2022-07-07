@@ -2,6 +2,8 @@ package cp2112
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestByteToInts(t *testing.T) {
@@ -16,10 +18,7 @@ func TestByteToInts(t *testing.T) {
 	stim[255] = [8]int{1, 1, 1, 1, 1, 1, 1, 1}
 
 	for b, ex := range stim {
-		r := byteToInts(b)
-		if r != ex {
-			t.Errorf("byteToInts(%d) = %v, expected: %v.", b, r, ex)
-		}
+		assert.Equalf(t, ex, byteToInts(b), "should be equal for input %v", b)
 	}
 }
 
@@ -35,10 +34,7 @@ func TestIntToByte(t *testing.T) {
 	stim[255] = [8]int{1, 1, 1, 1, 1, 1, 1, 1}
 
 	for ex, bits := range stim {
-		r := intsToByte(bits)
-		if r != ex {
-			t.Errorf("intsToByte(%d) = %v, expected: %v.", bits, r, ex)
-		}
+		assert.Equalf(t, ex, intsToByte(bits), "should be equal for input %v", bits)
 	}
 }
 
@@ -54,10 +50,7 @@ func TestByteToGpioValues(t *testing.T) {
 	stim[255] = [8]GpioValue{1, 1, 1, 1, 1, 1, 1, 1}
 
 	for b, ex := range stim {
-		r := byteToGpioValues(b)
-		if r != ex {
-			t.Errorf("byteToGpioValues(%d) = %v, expected: %v.", b, r, ex)
-		}
+		assert.Equalf(t, ex, byteToGpioValues(b), "should be equal for input %v", b)
 	}
 }
 
@@ -73,20 +66,14 @@ func TestGpioValuesToByte(t *testing.T) {
 	stim[255] = [8]GpioValue{1, 1, 1, 1, 1, 1, 1, 1}
 
 	for ex, bits := range stim {
-		r := gpioValuesToByte(bits)
-		if r != ex {
-			t.Errorf("gpioValuesToByte(%d) = %v, expected: %v.", bits, r, ex)
-		}
+		assert.Equalf(t, ex, gpioValuesToByte(bits), "should be equal for input %v", bits)
 	}
 }
 
 func TestAllGpioValues(t *testing.T) {
 	for i := 0; i < 256; i++ {
 		b := uint8(i)
-		r := gpioValuesToByte(byteToGpioValues(b))
-		if r != b {
-			t.Errorf("gpioValuesToByte(byteToGpioValues(%d)) = %d.", b, r)
-		}
+		assert.Equal(t, b, gpioValuesToByte(byteToGpioValues(b)), "should be equal")
 	}
 }
 
@@ -100,11 +87,7 @@ func TestCalculateClockFrequency(t *testing.T) {
 		255: 94_117,
 	}
 	for k, v := range vals {
-		d := uint8(k)
-		r := CalculateClockFrequency(d)
-		if r != v {
-			t.Errorf("CalculateClockFrequency(%v) = %v.", d, r)
-		}
+		assert.Equal(t, v, CalculateClockFrequency(k), "should be equal")
 	}
 }
 
@@ -134,14 +117,11 @@ func TestCalculateClockDividerOk(t *testing.T) {
 		{94_118, 255},
 		{94_117, 255},
 	}
-	for i, s := range vals {
+	for _, s := range vals {
 		r1, r2, err := CalculateClockDivider(s.Freq)
-		if err != nil {
-			t.Error(err)
-		}
-		if r1 != s.Exp || r2 > s.Freq {
-			t.Errorf("%v: CalculateClockDivider(%v) = %v, %v.", i, s.Freq, r1, r2)
-		}
+		assert.NoErrorf(t, err, "%v should not generate an error", s.Freq)
+		assert.Equalf(t, s.Exp, r1, "should be equal for %v", s.Freq)
+		assert.LessOrEqual(t, r2, s.Freq, "result should be less than or equal to target")
 	}
 }
 
@@ -150,11 +130,8 @@ func TestCalculateClockDividerClockFreq(t *testing.T) {
 		d := byte(i)
 		f := CalculateClockFrequency(d)
 		rd, rf, err := CalculateClockDivider(f)
-		if err != nil {
-			t.Error(err)
-		}
-		if rd != d || f != rf {
-			t.Errorf("%v: CalculateClockDivider(CalculateClockFrequency(%v)) = %v, %v. Should have %v", i, d, rd, rf, f)
-		}
+		assert.NoErrorf(t, err, "frequency %v should not generate an error (divider %v)", f, d)
+		assert.Equal(t, d, rd, "dividers should be equal")
+		assert.Equal(t, f, rf, "frequencies should be equal")
 	}
 }
