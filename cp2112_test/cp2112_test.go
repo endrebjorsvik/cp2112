@@ -57,9 +57,9 @@ func (d *dummyHid) Close() error {
 
 func TestResetDevice(t *testing.T) {
 	d := &dummyHid{send: func(buf []byte) (int, error) {
-		assert.Equal(t, 2, len(buf))
-		assert.Equal(t, uint8(0x01), buf[0])
-		assert.Equal(t, uint8(0x01), buf[1])
+		assert.Equal(t, 2, len(buf), "buffer must have correct length")
+		assert.Equal(t, uint8(0x01), buf[0], "report ID must be correct")
+		assert.Equal(t, uint8(0x01), buf[1], "magic number must be correct")
 		return len(buf), nil
 	}}
 	dev := cp2112.NewCP2112FromHid(d)
@@ -69,15 +69,27 @@ func TestResetDevice(t *testing.T) {
 
 func TestGetVersionInformation(t *testing.T) {
 	d := &dummyHid{get: func(buf []byte) (int, error) {
-		assert.Equal(t, 3, len(buf))
-		assert.Equal(t, uint8(0x05), buf[0])
+		assert.Equal(t, 3, len(buf), "buffer must have correct length")
+		assert.Equal(t, uint8(0x05), buf[0], "report ID must be correct")
 		buf[1] = 0x0C
 		buf[2] = 0xAB
 		return len(buf), nil
 	}}
 	dev := cp2112.NewCP2112FromHid(d)
 	v, err := dev.GetVersionInformation()
-	assert.NoError(t, err)
-	assert.Equal(t, uint8(0x0C), v.PartNumber)
-	assert.Equal(t, uint8(0xAB), v.DeviceVersion)
+	assert.NoError(t, err, "function must not fail")
+	assert.Equal(t, uint8(0x0C), v.PartNumber, "part number must be correct")
+	assert.Equal(t, uint8(0xAB), v.DeviceVersion, "device version must be correct")
+}
+
+func TestGetVersionInformationBad(t *testing.T) {
+	d := &dummyHid{get: func(buf []byte) (int, error) {
+		assert.Equal(t, 3, len(buf), "buffer must have correct length")
+		assert.Equal(t, uint8(0x05), buf[0], "report ID must be correct")
+		buf = make([]byte, 2)
+		return len(buf), nil
+	}}
+	dev := cp2112.NewCP2112FromHid(d)
+	_, err := dev.GetVersionInformation()
+	assert.Error(t, err, "function must fail")
 }
