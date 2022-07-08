@@ -11,7 +11,7 @@ is based on the [hidapi](https://github.com/signal11/hidapi) C interface.
 - Copy the `hidapi\include` folder `hidapi\hidapi`
 - Set the two environment variables `CGO_CFLAGS` and `CGO_LDFLAGS` as follows:
   - `$env:CGO_CFLAGS = "-IC:\usr\lib\hidapi-win-0.12.0 -g -O2"`
-  - `$env:CGO_LDFLAGS = "-IC:\usr\lib\hidapi-win-0.12.0\x64 -g -O2"`
+  - `$env:CGO_LDFLAGS = "-LC:\usr\lib\hidapi-win-0.12.0\x64 -g -O2"`
 - Check that the Go environment is properly updated with the `go env` command.
 - Copy the `hidapi\x64\hidapi.dll` to your current working directory, or somewhere that is accessible from the `PATH` variable.
 

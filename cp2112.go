@@ -60,6 +60,11 @@ func NewCP2112(vid, pid uint16, serial string) (*CP2112, error) {
 	return &CP2112{dev: dev}, nil
 }
 
+// NewCP2112FromHid creates a new CP2112 device from an existing HidInterface.
+func NewCP2112FromHid(dev HidInterface) *CP2112 {
+	return &CP2112{dev: dev}
+}
+
 func (c *CP2112) Close() error {
 	log.Debugf("Closing CP2112 device.")
 	return c.dev.Close()
