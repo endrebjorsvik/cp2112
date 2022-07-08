@@ -250,10 +250,10 @@ func (d *CP2112) TransferDataReadForceSend(length uint16) error {
 
 // TransferDataReadResponse returns status and data for Data Read Request,
 // Data Write Request, and Data Read Force Send.
-func (d *CP2112) TransferDataReadResponse() (TransferStatus0, []byte, error) {
+func (d *CP2112) TransferDataReadResponse(timeout time.Duration) (TransferStatus0, []byte, error) {
 	errf := errorWrapper("TransferDataReadResponse")
 	buf := make([]byte, 64)
-	if n, err := d.dev.Read(buf); err != nil {
+	if n, err := d.dev.ReadWithTimeout(buf, timeout); err != nil {
 		return 0, nil, errf(err)
 	} else if n != len(buf) {
 		return 0, nil, errf(ErrRecvUnexpectedBytes(n))
@@ -450,10 +450,10 @@ func (s *TransferCompleteInfo) String() string {
 
 // TransferStatusResponse receives the status response from the previously
 // requested transfer status.
-func (d *CP2112) TransferStatusResponse() (TransferStatus, error) {
+func (d *CP2112) TransferStatusResponse(timeout time.Duration) (TransferStatus, error) {
 	errf := errorWrapper("TransferStatusResponse")
 	buf := make([]byte, 7)
-	if n, err := d.dev.Read(buf); err != nil {
+	if n, err := d.dev.ReadWithTimeout(buf, timeout); err != nil {
 		return TransferStatus{}, errf(err)
 	} else if n != len(buf) {
 		return TransferStatus{}, errf(ErrSentUnexpectedBytes(n))

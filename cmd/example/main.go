@@ -84,7 +84,7 @@ func smbusDemo(dev *cp2112.CP2112) error {
 		if err := dev.TransferStatusRequest(); err != nil {
 			return fmt.Errorf("Could not request transfer status: %w", err)
 		}
-		status, err := dev.TransferStatusResponse()
+		status, err := dev.TransferStatusResponse(100 * time.Millisecond)
 		if err != nil {
 			return fmt.Errorf("Could not read transfer status: %w", err)
 		}
@@ -93,7 +93,7 @@ func smbusDemo(dev *cp2112.CP2112) error {
 	if err := dev.TransferDataReadForceSend(2); err != nil {
 		return fmt.Errorf("Could not force read: %w.", err)
 	}
-	st, data, err := dev.TransferDataReadResponse()
+	st, data, err := dev.TransferDataReadResponse(100 * time.Millisecond)
 	if err != nil {
 		return fmt.Errorf("Could not receive TransferDataReadResponse: %w.", err)
 	}
