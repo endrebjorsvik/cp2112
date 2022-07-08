@@ -7,4 +7,5 @@ func checkWriteLength(n int, buf []byte) error {
 	if n != len(buf) {
 		return ErrSentUnexpectedBytes(n)
 	}
+	return nil
 }
