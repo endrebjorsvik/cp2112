@@ -208,7 +208,7 @@ func (d *CP2112) TransferDataWriteReadRequest(deviceAddr byte, length uint16, ta
 	}).Tracef("TransferDataWriteReadRequest sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
-	} else if n != len(buf) {
+	} else if err := checkWriteLength(n, buf); err != nil {
 		return errf(ErrSentUnexpectedBytes(n))
 	}
 	return nil
@@ -242,8 +242,8 @@ func (d *CP2112) TransferDataReadForceSend(length uint16) error {
 	}).Tracef("TransferDataReadForceSend sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
-	} else if n != len(buf) {
-		return errf(ErrSentUnexpectedBytes(n))
+	} else if err := checkWriteLength(n, buf); err != nil {
+		return errf(err)
 	}
 	return nil
 }
@@ -307,7 +307,7 @@ func (d *CP2112) TransferDataWrite(deviceAddr byte, data []byte) error {
 	}).Tracef("TransferDataWrite sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
-	} else if n != len(buf) {
+	} else if err := checkWriteLength(n, buf); err != nil {
 		return errf(ErrSentUnexpectedBytes(n))
 	}
 	return nil
@@ -325,7 +325,7 @@ func (d *CP2112) TransferStatusRequest() error {
 	}).Tracef("TransferStatusRequest sending raw buffer.")
 	if n, err := d.dev.Write(buf); err != nil {
 		return errf(err)
-	} else if n != len(buf) {
+	} else if err := checkWriteLength(n, buf); err != nil {
 		return errf(ErrSentUnexpectedBytes(n))
 	}
 	return nil
