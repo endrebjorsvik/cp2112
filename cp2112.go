@@ -211,6 +211,8 @@ func (d *CP2112) GetVersionInformation() (Version, error) {
 		return Version{}, errf(err)
 	} else if n != 3 {
 		return Version{}, errf(ErrRecvUnexpectedBytes(n))
+	} else if buf[0] != reportIdGetVersionInformation {
+		return Version{}, errf(ErrUnexpectedReportID(buf[0]))
 	}
 	v := Version{
 		PartNumber:    buf[1],
