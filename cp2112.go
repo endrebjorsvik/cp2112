@@ -2,16 +2,26 @@ package cp2112
 
 import (
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	hid "github.com/sstallion/go-hid"
 )
 
+// HidInterface defines the required interface for any HID device.
+type HidInterface interface {
+	SendFeatureReport([]byte) (int, error)
+	GetFeatureReport([]byte) (int, error)
+	Write([]byte) (int, error)
+	ReadWithTimeout([]byte, time.Duration) (int, error)
+	Close() error
+}
+
 // CP2112 is the primary type for interacting with the SiLabs CP2112
 // USB-to-I2C/SMBus controller. The controller also contains a 8 GPIO
 // pins that can be controlled through the same interface.
 type CP2112 struct {
-	dev *hid.Device // Open device handle
+	dev HidInterface // Open device handle
 }
 
 // DevID is USB HID identification that is used to connect to the correct
