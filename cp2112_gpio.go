@@ -168,6 +168,7 @@ func (d *CP2112) GetGpioValues() ([8]GpioValue, error) {
 	} else if n != len(buf) {
 		return [8]GpioValue{}, errf(ErrRecvUnexpectedBytes(n))
 	}
+	// XXX: Manual specifies two bytes for latch value, not one.
 	vals := byteToGpioValues(buf[1])
 	log.WithFields(log.Fields{
 		"method": "GetGpioValues",
